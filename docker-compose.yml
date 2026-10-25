@@ -1,0 +1,8 @@
+services:
+  underworld-gambit:
+    build: .
+    image: underworld-gambit:latest
+    container_name: underworld-gambit
+    restart: unless-stopped
+    ports:
+      - "8080:80"   # put a TLS reverse proxy (Caddy, Traefik, nginx) in front for HTTPS

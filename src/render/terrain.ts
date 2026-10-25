@@ -82,6 +82,9 @@ function tileTexture(over: boolean, biome: string, dark: boolean, variant: numbe
   g.fillStyle = paint.base[dark ? 1 : 0];
   g.fillRect(0, 0, S, S);
   paint.draw(g, rng(500 + variant * 17 + biome.charCodeAt(0)), dark);
+  // Push neighbouring squares apart: light ones brighter, dark ones deeper, so the checker is obvious.
+  g.fillStyle = dark ? 'rgba(0,0,0,0.34)' : over ? 'rgba(255,255,255,0.2)' : 'rgba(255,215,190,0.14)';
+  g.fillRect(0, 0, S, S);
   // Slab edge so each square reads on its own.
   g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 7; g.strokeRect(0, 0, S, S);
   g.strokeStyle = over ? 'rgba(255,255,255,0.22)' : 'rgba(255,150,80,0.16)'; g.lineWidth = 2; g.strokeRect(5, 5, S - 10, S - 10);

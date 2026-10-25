@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { Easing, animating, clock, resetClockGap, start, tickTweens, tween, tweens } from './tween';
 import type { BoardId, Move, MoveInfo, Piece, Position } from '../rules';
 import { Fx } from './fx';
-import { buildHellFrame, buildHellGround, hellTileMaterials } from './decor';
+import { addFrameProps } from './models';
+import { buildGildedFrame, buildHeavenGround, buildHellFrame, buildHellGround, hellTileMaterials, marbleTileMaterials } from './decor';
 import { Kit, pickStyle, restoreView } from './exec';
 import { settings } from '../platform/settings';
 import { PieceView, createPieceView, makeGhost, updatePieceView } from './pieces';
@@ -67,6 +68,7 @@ export class World {
     this.boards[1].position.y = -GAP;
     this.buildBoard(0);
     this.buildBoard(1);
+    void addFrameProps(this.boards[1]).then(() => this.invalidate());
     this.boards.forEach((b, i) => b.add(this.markers[i]));
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -77,8 +79,7 @@ export class World {
   private buildBoard(b: BoardId): void {
     const g = this.boards[b];
     const over = b === 0;
-    const plain = { light: [new THREE.MeshToonMaterial({ color: 0xf3ead6 })], dark: [new THREE.MeshToonMaterial({ color: 0xc9a24a })] };
-    const mats = over ? plain : hellTileMaterials();
+    const mats = over ? marbleTileMaterials() : hellTileMaterials();
     const tileGeo = new THREE.BoxGeometry(0.98, 0.3, 0.98);
     for (let sq = 0; sq < 64; sq++) {
       const pool = ((sq & 7) + (sq >> 3)) & 1 ? mats.light : mats.dark;
@@ -89,9 +90,7 @@ export class World {
       this.tiles[b].push(t);
     }
     if (over) {
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(8.7, 0.5, 8.7), new THREE.MeshToonMaterial({ color: 0x8a6a22 }));
-      frame.position.y = -0.42;
-      g.add(frame);
+      g.add(buildGildedFrame(), buildHeavenGround());
     } else {
       g.add(buildHellFrame(), buildHellGround());
     }

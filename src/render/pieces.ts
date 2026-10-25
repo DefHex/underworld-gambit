@@ -225,7 +225,7 @@ export function createPieceView(piece: Piece, board: BoardId): PieceView {
   const outline = new THREE.Mesh(
     body.geometry,
     new THREE.MeshBasicMaterial({
-      color: OUTLINE[piece.color], transparent: true, opacity: 0.3,
+      color: OUTLINE[piece.color], transparent: true, opacity: 0.14,
       depthFunc: THREE.GreaterDepth, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, // pulled forward so a piece never outlines itself
     }),

@@ -138,3 +138,82 @@ export function buildHellGround(): THREE.Group {
   root.add(floor, halo);
   return root;
 }
+
+// ---------- the Overworld: marble and gold, equally clean ----------
+
+function marbleTexture(light: boolean, variant: number): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = light ? '#f2eadb' : '#b98f3c';
+  g.fillRect(0, 0, 256, 256);
+  const r = rng(77 + variant * 13 + (light ? 0 : 5));
+  for (let i = 0; i < 40; i++) {
+    g.fillStyle = light ? `rgba(200,190,170,${0.05 + r() * 0.1})` : `rgba(255,230,150,${0.05 + r() * 0.12})`;
+    g.beginPath(); g.arc(r() * 256, r() * 256, 10 + r() * 34, 0, 7); g.fill();
+  }
+  g.lineCap = 'round';
+  for (const [w, color] of [[2.4, light ? 'rgba(150,140,130,0.35)' : 'rgba(110,70,10,0.4)'], [1, light ? 'rgba(255,255,255,0.8)' : 'rgba(255,240,180,0.6)']] as [number, string][]) {
+    const rr = rng(311 + variant * 53);
+    g.strokeStyle = color; g.lineWidth = w;
+    for (let i = 0; i < 3; i++) {
+      let x = rr() * 256, y = rr() * 256, a = rr() * 6.28;
+      g.beginPath(); g.moveTo(x, y);
+      for (let s = 0; s < 6; s++) { a += (rr() - 0.5) * 0.9; x += Math.cos(a) * (20 + rr() * 30); y += Math.sin(a) * (20 + rr() * 30); g.lineTo(x, y); }
+      g.stroke();
+    }
+  }
+  g.strokeStyle = 'rgba(80,60,30,0.35)'; g.lineWidth = 6; g.strokeRect(0, 0, 256, 256);
+  g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 2; g.strokeRect(5, 5, 246, 246);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+export function marbleTileMaterials(): { light: THREE.Material[]; dark: THREE.Material[] } {
+  const build = (light: boolean) => Array.from({ length: 4 }, (_, i) => new THREE.MeshToonMaterial({ map: marbleTexture(light, i) }));
+  return { light: build(true), dark: build(false) };
+}
+
+/** Gilded frame with a bright inlay and four pillar finials. */
+export function buildGildedFrame(): THREE.Group {
+  const root = new THREE.Group();
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(8.7, 0.5, 8.7), new THREE.MeshToonMaterial({ color: 0x9a7424 }));
+  frame.position.y = -0.42;
+  root.add(frame);
+  const e = 4.22, len = 8.5;
+  const inlay = merge([
+    box(len, 0.03, 0.08, 0xfff0b0, { z: e, y: -0.16 }), box(len, 0.03, 0.08, 0xfff0b0, { z: -e, y: -0.16 }),
+    box(0.08, 0.03, len, 0xfff0b0, { x: e, y: -0.16 }), box(0.08, 0.03, len, 0xfff0b0, { x: -e, y: -0.16 }),
+  ]);
+  root.add(mesh(inlay));
+  const pillars: THREE.BufferGeometry[] = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const x = sx * 4.34, z = sz * 4.34;
+    pillars.push(cyl(0.2, 0.26, 0.5, 0xe8dcc0, { x, z, y: 0.02 }, 8), cyl(0.27, 0.27, 0.07, 0xd9a93a, { x, z, y: -0.2 }, 8), cyl(0.27, 0.27, 0.07, 0xd9a93a, { x, z, y: 0.3 }, 8));
+    pillars.push(cone(0.12, 0.3, 0xe0b040, { x, z, y: 0.48 }, 6));
+  }
+  root.add(mesh(merge(pillars)));
+  return root;
+}
+
+export function buildHeavenGround(): THREE.Group {
+  const root = new THREE.Group();
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(128, 128, 20, 128, 128, 128);
+  grad.addColorStop(0, 'rgba(255,240,200,0.9)');
+  grad.addColorStop(0.5, 'rgba(255,225,160,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+  const halo = new THREE.Mesh(
+    new THREE.PlaneGeometry(17, 17).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  halo.position.y = -0.62;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xbdd2e6 }));
+  floor.position.y = -0.7;
+  root.add(floor, halo);
+  return root;
+}

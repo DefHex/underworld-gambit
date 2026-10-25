@@ -2,3 +2,4 @@ node_modules
 dist
 selfplay-*.json
 prof.out
+assets/raw

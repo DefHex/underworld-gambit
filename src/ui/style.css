@@ -25,7 +25,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0710; col
   text-align: center; }
 #hint:empty { display: none; }
 #toolbar { position: fixed; left: calc(var(--sal) + 8px); top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 5px; }
+  display: flex; flex-direction: column; flex-wrap: wrap; gap: 5px; max-height: 90vh; align-content: flex-start; }
 #toolbar button { width: 36px; height: 36px; border-radius: 18px; border: 1px solid var(--gold);
   background: rgba(10,6,16,.72); color: var(--gold); font-size: 17px; padding: 0; }
 #toolbar button:active { background: rgba(60,40,10,.9); }

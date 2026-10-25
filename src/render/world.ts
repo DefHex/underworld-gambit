@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { Easing, animating, clock, resetClockGap, start, tickTweens, tween, tweens } from './tween';
 import type { BoardId, Move, MoveInfo, Piece, Position } from '../rules';
 import { Fx } from './fx';
+import { Kit, pickStyle, restoreView } from './exec';
+import { settings } from '../platform/settings';
 import { PieceView, createPieceView, makeGhost, updatePieceView } from './pieces';
 
 export const GAP = 14; // vertical distance between the two boards in world space
@@ -48,6 +50,9 @@ export class World {
   shakeAmp = 0;
   zoom = 1;
   pending = 0;
+  lastStyle = '';
+  /** Animations in flight, so a reset can clear their props. */
+  private kits = new Set<Kit>();
   private dirty = true;
   private running = false;
   private lastT = 0;
@@ -143,6 +148,10 @@ export class World {
   /** Kills running animations and snaps to the position (undo, new game, load). */
   reset(pos: Position): void {
     tweens.removeAll();
+    for (const kit of this.kits) kit.cleanup();
+    this.kits.clear();
+    for (const v of this.views.values()) v.parent?.remove(v);
+    this.views.clear();
     clock.scale = 1;
     this.pending = 0;
     this.zoom = 1;
@@ -152,7 +161,7 @@ export class World {
     this.applyView(false);
   }
 
-  private shake(amp: number): void {
+  shake(amp: number): void {
     this.shakeAmp = amp;
     const o = { v: amp };
     start(tween(o).to({ v: 0 }, 340).onUpdate(() => { this.shakeAmp = o.v; }));
@@ -176,73 +185,79 @@ export class World {
   }
 
   /**
-   * Plays a move that has just been made: slide, then the fall or rise sequence.
+   * Plays a move that has just been made: a cinematic move or capture style for the piece,
+   * then the victim's fate (fall, or destruction) or the attacker's rise.
    * `pos` is the position after the move; the view is reconciled with it at the end.
    */
-  playMove(move: Move, info: MoveInfo, pos: Position): void {
+  async playMove(move: Move, info: MoveInfo, pos: Position): Promise<void> {
     const { fell, rose, destroyed: dead } = info;
+    const victimPiece = fell?.piece ?? dead ?? null;
+    const moverPiece = rose ? rose.piece : pos.boards[move.board][move.to]!;
+    const a = this.views.get(moverPiece.id);
+    const v = victimPiece ? this.views.get(victimPiece.id) : undefined;
     const special = new Set<number>();
-    if (fell) special.add(fell.piece.id);
+    if (victimPiece) special.add(victimPiece.id);
     if (rose) special.add(rose.piece.id);
-    if (dead) special.add(dead.id);
+    if (a) special.add(moverPiece.id);
     this.pending++;
     this.syncPieces(pos, true, special);
-    const finish = () => { this.syncPieces(pos, false); this.pending--; this.invalidate(); };
+    const finish = () => {
+      this.syncPieces(pos, false);
+      if (move.promo) {
+        const [px, pz] = sqPos(move.to);
+        this.fx.burst(new THREE.Vector3(px, (move.board ? -GAP : 0) + 0.3, pz), 'gold', 30);
+      }
+      this.pending--;
+      this.invalidate();
+    };
+    if (!a) { finish(); return; }
+
+    const g = this.boards[move.board];
+    const [fx0, fz0] = sqPos(move.from), [tx, tz] = sqPos(move.to);
+    const kit = new Kit(this, g, a, v ?? null, new THREE.Vector3(fx0, 0, fz0), new THREE.Vector3(tx, 0, tz),
+      () => this.onEvent(fell ? 'fall' : 'destroy'));
+    const type = a.userData.type;
+    const style = pickStyle(type, !!victimPiece, settings.cinematic && !move.castle);
+    this.lastStyle = `${type}${victimPiece ? ' kill' : ' move'}: ${style.name}`;
+    if (style.zoom) start(tween(this).to({ zoom: style.zoom }, 280).easing(Easing.Cubic.Out));
+    this.kits.add(kit);
+    try {
+      await style.run(kit);
+      if (victimPiece && v && !kit.hitCalled) await kit.hit('squash');
+      await kit.reaction;
+    } finally {
+      kit.cleanup();
+      this.kits.delete(kit);
+      if (style.zoom) start(tween(this).to({ zoom: 1 }, 320).easing(Easing.Cubic.InOut));
+    }
 
     if (rose) {
-      const m = this.views.get(rose.piece.id)!;
-      const [mx, mz] = sqPos(move.to);
-      start(tween(m.position).to({ x: mx, z: mz }, 260).easing(Easing.Cubic.Out));
-      const victim = dead ? this.views.get(dead.id) : undefined;
-      if (dead && victim) {
-        this.later(200, () => {
-          this.onEvent('destroy');
-          this.fx.burst(this.at(1, move.to, 0.1), 'violet', 26, { speed: 0.8 });
-          this.shrinkAway(victim, dead.id, () => {});
-        });
-      }
-      this.later(340, () => {
-        this.onEvent('rise');
-        const [rx, rz] = sqPos(rose.to);
-        this.fx.column(this.boards[0], rx, rz);
-        this.fx.burst(this.at(0, rose.to, 0.1), 'gold', 46, { speed: 1.2 });
-        this.shake(0.1);
-        this.boards[0].add(m);
-        m.position.set(rx, -1.8, rz);
-        m.scale.setScalar(0.7);
-        updatePieceView(m, rose.piece, 0);
-        start(tween(m.scale).to({ x: 1, y: 1, z: 1 }, 520).easing(Easing.Cubic.Out));
-        start(tween(m.position).to({ y: 0 }, 520).easing(Easing.Back.Out).onComplete(finish));
-      });
-    } else if (fell) {
-      const v = this.views.get(fell.piece.id)!;
-      const [vx, vz] = sqPos(fell.from);
-      this.later(200, () => {
-        this.onEvent('fall');
-        this.fx.crack(this.boards[0], vx, vz);
-        this.fx.burst(this.at(0, fell.from, 0.1), 'ember', 40);
-        this.shake(0.14);
-        start(tween(v.position).to({ y: -1.5 }, 420).easing(Easing.Back.In));
-        start(tween(v.scale).to({ x: 0.25, y: 0.25, z: 0.25 }, 420).easing(Easing.Cubic.In).onComplete(() => {
-          const [tx, tz] = sqPos(fell.to);
-          this.boards[1].add(v);
-          updatePieceView(v, fell.piece, 1);
-          v.position.set(tx, 0, tz);
-          v.scale.setScalar(0.01);
-          this.fx.burst(this.at(1, fell.to, 0.1), 'ember', 28, { speed: 0.7 });
-          start(tween(v.scale).to({ x: 1, y: 1, z: 1 }, 380).easing(Easing.Back.Out).onComplete(finish));
-        }));
-      });
-    } else if (dead) {
-      const v = this.views.get(dead.id);
-      this.later(200, () => {
-        this.onEvent('destroy');
-        this.fx.burst(this.at(move.board, move.to, 0.1), move.board ? 'violet' : 'gold', 24, { speed: 0.8 });
-        if (v) this.shrinkAway(v, dead.id, finish);
-        else finish();
-      });
+      this.onEvent('rise');
+      const [rx, rz] = sqPos(rose.to);
+      this.fx.column(this.boards[0], rx, rz);
+      this.fx.burst(this.at(0, rose.to, 0.1), 'gold', 46, { speed: 1.2 });
+      this.shake(0.1);
+      if (v) { v.parent?.remove(v); this.views.delete(victimPiece!.id); }
+      this.boards[0].add(a);
+      a.position.set(rx, -1.8, rz);
+      a.scale.setScalar(0.7);
+      updatePieceView(a, rose.piece, 0);
+      start(tween(a.scale).to({ x: 1, y: 1, z: 1 }, 520).easing(Easing.Cubic.Out));
+      start(tween(a.position).to({ y: 0 }, 520).easing(Easing.Back.Out).onComplete(finish));
+    } else if (fell && v) {
+      restoreView(v);
+      this.fx.crack(this.boards[0], tx, tz);
+      this.fx.burst(this.at(0, fell.from, 0.1), 'ember', 30);
+      const [bx, bz] = sqPos(fell.to);
+      this.boards[1].add(v);
+      updatePieceView(v, fell.piece, 1);
+      v.position.set(bx, 0, bz);
+      v.scale.setScalar(0.01);
+      this.fx.burst(this.at(1, fell.to, 0.1), 'ember', 28, { speed: 0.7 });
+      start(tween(v.scale).to({ x: 1, y: 1, z: 1 }, 380).easing(Easing.Back.Out).onComplete(finish));
     } else {
-      this.later(270, finish);
+      if (v) { v.parent?.remove(v); this.views.delete(victimPiece!.id); }
+      finish();
     }
     this.invalidate();
   }
@@ -383,6 +398,22 @@ export class World {
     this.portalRect = { x: w - pw - 14, y: h - ph - 14, w: pw, h: ph };
     this.invalidate();
   }
+
+  /** Test hook: steps the animations forward by `ms` without waiting for browser frames, then draws. */
+  advance(ms: number): void {
+    const step = 16;
+    let t = this.lastT || performance.now();
+    for (let done = 0; done < ms; done += step) {
+      t += step;
+      tickTweens(t);
+      this.fx.update((step / 1000) * clock.scale);
+    }
+    this.lastT = t;
+    this.render();
+  }
+
+  /** Test hook: animation clock state. */
+  debugState() { return { t: clock.t, last: clock.last, tweens: tweens.getAll().length, playing: tweens.getAll().filter((x) => x.isPlaying()).length }; }
 
   invalidate(): void {
     this.dirty = true;

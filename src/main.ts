@@ -1,5 +1,6 @@
 import { Game, PieceType, Status } from './rules';
 import { World } from './render/world';
+import { debug as styleDebug } from './render/exec';
 import { Controller } from './ui/controller';
 import { AiPlayer } from './ai/client';
 import * as audio from './audio/audio';
@@ -104,6 +105,10 @@ $('btn-sound').onclick = () => {
   $('btn-sound').textContent = settings.sound ? '♪' : '✕';
 };
 $('btn-sound').textContent = settings.sound ? '♪' : '✕';
+const cineBtn = $('btn-cine');
+const paintCine = () => { cineBtn.style.opacity = settings.cinematic ? '1' : '0.45'; };
+cineBtn.onclick = () => { settings.cinematic = !settings.cinematic; saveSettings(); paintCine(); };
+paintCine();
 $('btn-switch').onclick = () => ctl.switchBoard();
 $('btn-rotate').onclick = () => world.rotate();
 $('btn-tactical').onclick = () => world.toggleTactical();
@@ -126,4 +131,4 @@ world.applyView(false);
 ctl.refresh();
 
 // Handles for browser tests.
-(window as unknown as { __uw: unknown }).__uw = { world, ctl, get game() { return ctl.game; } };
+(window as unknown as { __uw: unknown }).__uw = { world, ctl, settings, styleDebug, get game() { return ctl.game; } };

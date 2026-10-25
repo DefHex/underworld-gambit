@@ -5,11 +5,15 @@ import {
 } from 'three.quarks';
 import { Easing, start, tween } from './tween';
 
-export type Palette = 'ember' | 'gold' | 'violet';
+export type Palette = 'ember' | 'gold' | 'violet' | 'smoke' | 'fire' | 'white' | 'blue';
 const COLORS: Record<Palette, [number, number, number]> = {
   ember: [1, 0.42, 0.1],
   gold: [1, 0.85, 0.4],
   violet: [0.62, 0.35, 1],
+  smoke: [0.55, 0.55, 0.58],
+  fire: [1, 0.55, 0.12],
+  white: [1, 1, 0.92],
+  blue: [0.6, 0.8, 1],
 };
 
 const softTexture = (() => {
@@ -32,7 +36,7 @@ const crackTexture = (() => {
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   g.translate(64, 64);
   g.lineCap = 'round';
-  for (const [w, color] of [[7, 'rgba(255,90,20,0.55)'], [3, 'rgba(15,5,5,0.95)']] as [number, string][]) {
+  for (const [w, color] of [[5, 'rgba(255,110,30,0.6)'], [3.5, 'rgba(8,3,3,0.98)']] as [number, string][]) {
     seed = 7;
     g.strokeStyle = color;
     g.lineWidth = w;

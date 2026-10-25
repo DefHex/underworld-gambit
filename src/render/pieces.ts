@@ -227,10 +227,10 @@ export function createPieceView(piece: Piece, board: BoardId): PieceView {
     new THREE.MeshBasicMaterial({
       color: OUTLINE[piece.color], transparent: true, opacity: 0.3,
       depthFunc: THREE.GreaterDepth, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, // pulled forward so a piece never outlines itself
     }),
   );
   outline.renderOrder = 5;
-  outline.scale.setScalar(1.03);
   const ring = new THREE.Mesh(ringGeo, ringMat);
   ring.position.y = 0.05;
   const blob = new THREE.Mesh(blobGeo, blobMat);

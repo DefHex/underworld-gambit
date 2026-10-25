@@ -50,15 +50,19 @@ function release(k: Kit): Rocket {
   return r;
 }
 
+/** The spent booster tumbles away sputtering, then burns out in the air. It never explodes: the only blast is on the victim. */
 async function tumbleDown(k: Kit, r: Rocket): Promise<void> {
   const p0 = r.position.clone();
+  const side = V(-k.dir.z, 0, k.dir.x).multiplyScalar(rnd(-1, 1));
   const sp = rnd(3, 6);
-  await k.tw(420, (u) => {
-    r.position.set(p0.x - k.dir.x * 0.5 * u, Math.max(0.1, p0.y * (1 - u * u)), p0.z - k.dir.z * 0.5 * u);
-    r.rotation.x = sp * u; r.userData.flame.scale.set(1, 1 - u, 1);
+  k.every(560, () => k.burst(r.position.clone(), 'smoke', 3, { life: 0.5, speed: 0.3 }), 2);
+  await k.tw(560, (u) => {
+    r.position.set(p0.x + side.x * 1.3 * u - k.dir.x * 0.4 * u, p0.y + 0.7 * u - 1.1 * u * u, p0.z + side.z * 1.3 * u - k.dir.z * 0.4 * u);
+    r.rotation.x = sp * u;
+    r.userData.flame.scale.set(1, Math.max(0.01, 1 - u * 1.3), 1);
+    r.scale.setScalar(Math.max(0.01, 1 - u * u * 0.9));
   }, Easing.Linear.None);
-  k.burst(r.position.clone(), 'fire', 12);
-  k.flash(r.position.clone(), 0xffb050, 0.5, 200);
+  k.burst(r.position.clone(), 'smoke', 6, { life: 0.5, speed: 0.3 });
   k.drop(r);
 }
 
@@ -264,7 +268,7 @@ const kill7: Style = {
   async run(k) {
     const r = strap(k);
     await ignite(k, r, 300);
-    k.burst(k.from.clone().setY(0.2), 'fire', 24, { speed: 1.6 });
+    k.burst(k.from.clone().setY(0.15), 'smoke', 14, { speed: 1.2, spread: Math.PI / 2 });
     smokeTrail(k, 700);
     await k.tw(420, (u) => {
       k.a.position.copy(k.at(u)); k.a.position.y = 0.4 + 1.1 * 4 * u * (1 - u);

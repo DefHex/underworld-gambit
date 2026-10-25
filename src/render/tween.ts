@@ -10,7 +10,7 @@ export const clock = { t: 0, scale: 1, last: -1 };
 /** Advances the virtual clock from a real rAF timestamp and updates all tweens. */
 export function tickTweens(realTime: number): void {
   if (clock.last < 0) clock.last = realTime;
-  const dt = Math.min(realTime - clock.last, 50);
+  const dt = Math.max(0, Math.min(realTime - clock.last, 50));
   clock.last = realTime;
   clock.t += dt * clock.scale;
   tweens.update(clock.t);

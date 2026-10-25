@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Easing, animating, clock, resetClockGap, start, tickTweens, tween, tweens } from './tween';
 import type { BoardId, Move, MoveInfo, Piece, Position } from '../rules';
 import { Fx } from './fx';
+import { buildHellFrame, buildHellGround, hellTileMaterials } from './decor';
 import { Kit, pickStyle, restoreView } from './exec';
 import { settings } from '../platform/settings';
 import { PieceView, createPieceView, makeGhost, updatePieceView } from './pieces';
@@ -26,7 +27,7 @@ interface ViewState { yaw: number; pitch: number; cy: number }
 
 const REALM = {
   0: { bg: 0xcfe3f5, fog: null as THREE.Fog | null },
-  1: { bg: 0x120820, fog: new THREE.Fog(0x1a0a2a, 34, 64) },
+  1: { bg: 0x0b0507, fog: new THREE.Fog(0x120609, 40, 80) },
 };
 
 export class World {
@@ -76,30 +77,32 @@ export class World {
   private buildBoard(b: BoardId): void {
     const g = this.boards[b];
     const over = b === 0;
-    const light = new THREE.MeshToonMaterial({ color: over ? 0xf3ead6 : 0x5a4670 });
-    const dark = new THREE.MeshToonMaterial({ color: over ? 0xc9a24a : 0x2a1a3a });
+    const plain = { light: [new THREE.MeshToonMaterial({ color: 0xf3ead6 })], dark: [new THREE.MeshToonMaterial({ color: 0xc9a24a })] };
+    const mats = over ? plain : hellTileMaterials();
     const tileGeo = new THREE.BoxGeometry(0.98, 0.3, 0.98);
     for (let sq = 0; sq < 64; sq++) {
-      const t = new THREE.Mesh(tileGeo, ((sq & 7) + (sq >> 3)) & 1 ? light : dark);
+      const pool = ((sq & 7) + (sq >> 3)) & 1 ? mats.light : mats.dark;
+      const t = new THREE.Mesh(tileGeo, pool[(sq * 7 + (sq >> 3)) % pool.length]);
       const [x, z] = sqPos(sq);
       t.position.set(x, -0.15, z);
       g.add(t);
       this.tiles[b].push(t);
     }
-    const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(8.7, 0.5, 8.7),
-      new THREE.MeshToonMaterial({ color: over ? 0x8a6a22 : 0x1d0f12 }),
-    );
-    frame.position.y = -0.42;
-    g.add(frame);
+    if (over) {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(8.7, 0.5, 8.7), new THREE.MeshToonMaterial({ color: 0x8a6a22 }));
+      frame.position.y = -0.42;
+      g.add(frame);
+    } else {
+      g.add(buildHellFrame(), buildHellGround());
+    }
     if (over) {
       g.add(new THREE.HemisphereLight(0xfff4de, 0xb0a080, 1.5));
       const sun = new THREE.DirectionalLight(0xffffff, 2.2);
       sun.position.set(-6, 12, 5);
       g.add(sun);
     } else {
-      g.add(new THREE.HemisphereLight(0xb090ff, 0x401020, 2.4));
-      const ember = new THREE.PointLight(0xff5a1a, 55, 26, 1.4);
+      g.add(new THREE.HemisphereLight(0xa890d8, 0x301018, 1.5));
+      const ember = new THREE.PointLight(0xff5a1a, 32, 26, 1.4);
       ember.position.set(0, 3, 0);
       g.add(ember);
       const rim = new THREE.DirectionalLight(0xb080ff, 1.2);

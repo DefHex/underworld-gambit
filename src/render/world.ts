@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { Easing, tween, tweens } from './tween';
-import type { BoardId, Piece, Position } from '../rules';
+import { Easing, animating, clock, resetClockGap, start, tickTweens, tween, tweens } from './tween';
+import type { BoardId, Move, MoveInfo, Piece, Position } from '../rules';
+import { Fx } from './fx';
 import { PieceView, createPieceView, makeGhost, updatePieceView } from './pieces';
 
 export const GAP = 14; // vertical distance between the two boards in world space
@@ -41,14 +42,22 @@ export class World {
   gliding = false;
   portalEnabled = true;
   portalRect = { x: 0, y: 0, w: 220, h: 124 }; // css pixels, top-left origin
+  fx: Fx;
+  /** Fired at the impact moment of an effect, for sound and haptics. */
+  onEvent: (e: 'fall' | 'rise' | 'destroy' | 'move' | 'check') => void = () => {};
+  shakeAmp = 0;
+  zoom = 1;
+  pending = 0;
   private dirty = true;
   private running = false;
+  private lastT = 0;
   private tiles: THREE.Mesh[][] = [[], []];
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.scene.add(...this.boards);
+    this.fx = new Fx(this.scene);
     this.boards[1].position.y = -GAP;
     this.buildBoard(0);
     this.buildBoard(1);
@@ -96,13 +105,14 @@ export class World {
 
   // ---------- pieces ----------
 
-  syncPieces(pos: Position, animate: boolean): void {
+  syncPieces(pos: Position, animate: boolean, skip?: Set<number>): void {
     const seen = new Set<number>();
     for (const b of [0, 1] as BoardId[]) {
       for (let sq = 0; sq < 64; sq++) {
         const p = pos.boards[b][sq];
         if (!p) continue;
         seen.add(p.id);
+        if (skip?.has(p.id)) continue;
         let v = this.views.get(p.id);
         const [x, z] = sqPos(sq);
         if (!v) {
@@ -115,14 +125,141 @@ export class World {
           const moved = v.parent !== this.boards[b];
           if (moved) { this.boards[b].add(v); v.position.set(x, 0, z); v.scale.setScalar(1); }
           else if (animate && (v.position.x !== x || v.position.z !== z)) {
-            tween(v.position).to({ x, z }, 260).easing(Easing.Cubic.Out).start();
+            start(tween(v.position).to({ x, z }, 260).easing(Easing.Cubic.Out));
           } else v.position.set(x, 0, z);
         }
       }
     }
     for (const [id, v] of this.views) {
-      if (!seen.has(id)) { v.parent?.remove(v); this.views.delete(id); }
+      if (!seen.has(id) && !skip?.has(id)) { v.parent?.remove(v); this.views.delete(id); }
     }
+    this.invalidate();
+  }
+
+  // ---------- move animation ----------
+
+  get busy(): boolean { return this.pending > 0; }
+
+  /** Kills running animations and snaps to the position (undo, new game, load). */
+  reset(pos: Position): void {
+    tweens.removeAll();
+    clock.scale = 1;
+    this.pending = 0;
+    this.zoom = 1;
+    this.shakeAmp = 0;
+    this.gliding = false;
+    this.syncPieces(pos, false);
+    this.applyView(false);
+  }
+
+  private shake(amp: number): void {
+    this.shakeAmp = amp;
+    const o = { v: amp };
+    start(tween(o).to({ v: 0 }, 340).onUpdate(() => { this.shakeAmp = o.v; }));
+  }
+
+  private at(b: BoardId, sq: number, y = 0): THREE.Vector3 {
+    const [x, z] = sqPos(sq);
+    return new THREE.Vector3(x, (b ? -GAP : 0) + y, z);
+  }
+
+  private later(ms: number, fn: () => void): void {
+    start(tween({ t: 0 }).to({ t: 1 }, ms).onComplete(fn));
+  }
+
+  private shrinkAway(v: PieceView, id: number, then: () => void): void {
+    start(tween(v.scale).to({ x: 0.01, y: 0.01, z: 0.01 }, 320).easing(Easing.Cubic.In).onComplete(() => {
+      v.parent?.remove(v);
+      this.views.delete(id);
+      then();
+    }));
+  }
+
+  /**
+   * Plays a move that has just been made: slide, then the fall or rise sequence.
+   * `pos` is the position after the move; the view is reconciled with it at the end.
+   */
+  playMove(move: Move, info: MoveInfo, pos: Position): void {
+    const { fell, rose, destroyed: dead } = info;
+    const special = new Set<number>();
+    if (fell) special.add(fell.piece.id);
+    if (rose) special.add(rose.piece.id);
+    if (dead) special.add(dead.id);
+    this.pending++;
+    this.syncPieces(pos, true, special);
+    const finish = () => { this.syncPieces(pos, false); this.pending--; this.invalidate(); };
+
+    if (rose) {
+      const m = this.views.get(rose.piece.id)!;
+      const [mx, mz] = sqPos(move.to);
+      start(tween(m.position).to({ x: mx, z: mz }, 260).easing(Easing.Cubic.Out));
+      const victim = dead ? this.views.get(dead.id) : undefined;
+      if (dead && victim) {
+        this.later(200, () => {
+          this.onEvent('destroy');
+          this.fx.burst(this.at(1, move.to, 0.1), 'violet', 26, { speed: 0.8 });
+          this.shrinkAway(victim, dead.id, () => {});
+        });
+      }
+      this.later(340, () => {
+        this.onEvent('rise');
+        const [rx, rz] = sqPos(rose.to);
+        this.fx.column(this.boards[0], rx, rz);
+        this.fx.burst(this.at(0, rose.to, 0.1), 'gold', 46, { speed: 1.2 });
+        this.shake(0.1);
+        this.boards[0].add(m);
+        m.position.set(rx, -1.8, rz);
+        m.scale.setScalar(0.7);
+        updatePieceView(m, rose.piece, 0);
+        start(tween(m.scale).to({ x: 1, y: 1, z: 1 }, 520).easing(Easing.Cubic.Out));
+        start(tween(m.position).to({ y: 0 }, 520).easing(Easing.Back.Out).onComplete(finish));
+      });
+    } else if (fell) {
+      const v = this.views.get(fell.piece.id)!;
+      const [vx, vz] = sqPos(fell.from);
+      this.later(200, () => {
+        this.onEvent('fall');
+        this.fx.crack(this.boards[0], vx, vz);
+        this.fx.burst(this.at(0, fell.from, 0.1), 'ember', 40);
+        this.shake(0.14);
+        start(tween(v.position).to({ y: -1.5 }, 420).easing(Easing.Back.In));
+        start(tween(v.scale).to({ x: 0.25, y: 0.25, z: 0.25 }, 420).easing(Easing.Cubic.In).onComplete(() => {
+          const [tx, tz] = sqPos(fell.to);
+          this.boards[1].add(v);
+          updatePieceView(v, fell.piece, 1);
+          v.position.set(tx, 0, tz);
+          v.scale.setScalar(0.01);
+          this.fx.burst(this.at(1, fell.to, 0.1), 'ember', 28, { speed: 0.7 });
+          start(tween(v.scale).to({ x: 1, y: 1, z: 1 }, 380).easing(Easing.Back.Out).onComplete(finish));
+        }));
+      });
+    } else if (dead) {
+      const v = this.views.get(dead.id);
+      this.later(200, () => {
+        this.onEvent('destroy');
+        this.fx.burst(this.at(move.board, move.to, 0.1), move.board ? 'violet' : 'gold', 24, { speed: 0.8 });
+        if (v) this.shrinkAway(v, dead.id, finish);
+        else finish();
+      });
+    } else {
+      this.later(270, finish);
+    }
+    this.invalidate();
+  }
+
+  /** Pulses the checked king's tile. */
+  checkFlash(sq: number): void {
+    const [x, z] = sqPos(sq);
+    this.fx.flashTile(this.boards[0], x, z);
+    this.onEvent('check');
+    this.invalidate();
+  }
+
+  /** Slow motion and a slow push-in for checkmate. */
+  mateSlowmo(): void {
+    clock.scale = 0.3;
+    start(tween(this).to({ zoom: 0.78 }, 500).easing(Easing.Cubic.Out));
+    setTimeout(() => { clock.scale = 1; }, 1500);
     this.invalidate();
   }
 
@@ -168,6 +305,10 @@ export class World {
     const yaw = THREE.MathUtils.degToRad(state.yaw);
     const pitch = THREE.MathUtils.degToRad(state.pitch);
     const center = new THREE.Vector3(0, state.cy, 0);
+    if (cam === this.mainCam && this.shakeAmp > 0.001) {
+      center.x += (Math.random() - 0.5) * this.shakeAmp;
+      center.y += (Math.random() - 0.5) * this.shakeAmp;
+    }
     const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
     cam.position.copy(center).addScaledVector(dir, 40);
     cam.up.set(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -192,11 +333,11 @@ export class World {
     const t = this.targetView();
     if (!animate) { Object.assign(this.view, t); this.invalidate(); return; }
     this.gliding = true;
-    tween(this.view)
+    const tw = tween(this.view)
       .to(t, 600)
       .easing(Easing.Cubic.InOut)
-      .onComplete(() => { this.gliding = false; this.invalidate(); })
-      .start();
+      .onComplete(() => { this.gliding = false; this.invalidate(); });
+    start(tw);
     this.invalidate();
   }
 
@@ -247,10 +388,15 @@ export class World {
     this.dirty = true;
     if (this.running) return;
     this.running = true;
+    resetClockGap();
+    this.lastT = performance.now();
     const tick = (time: number) => {
-      tweens.update(time);
+      const dt = Math.max(0, Math.min((time - this.lastT) / 1000, 0.05));
+      this.lastT = time;
+      tickTweens(time);
+      this.fx.update(dt * clock.scale);
       this.render();
-      if (tweens.getAll().some((t) => t.isPlaying()) || this.dirty) {
+      if (animating() || this.fx.active || this.dirty) {
         this.dirty = false;
         requestAnimationFrame(tick);
       } else this.running = false;
@@ -263,7 +409,7 @@ export class World {
     if (!w || !h) return;
     const r = this.renderer;
     const other = (1 - this.active) as BoardId;
-    this.frame(this.mainCam, w / h, this.view, FRUSTUM_H);
+    this.frame(this.mainCam, w / h, this.view, FRUSTUM_H * this.zoom);
 
     r.setScissorTest(false);
     r.setViewport(0, 0, w, h);

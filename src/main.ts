@@ -1,6 +1,9 @@
 import { Game, PieceType, Status } from './rules';
 import { World } from './render/world';
 import { Controller } from './ui/controller';
+import * as audio from './audio/audio';
+import { buzz } from './platform/haptics';
+import { saveSettings, settings } from './platform/settings';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('stage');
@@ -58,6 +61,20 @@ ctl.onPromotion = (choose) => {
   }
 };
 
+world.onEvent = (e) => {
+  if (e === 'fall') { audio.play('fall'); buzz('fall'); }
+  else if (e === 'rise') { audio.play('rise'); buzz('rise'); }
+  else if (e === 'destroy') audio.play('destroy');
+  else if (e === 'check') { audio.play('check'); buzz('check'); }
+};
+// Browsers only allow audio after a gesture.
+window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
+$('btn-sound').onclick = () => {
+  settings.sound = !settings.sound; settings.music = settings.sound;
+  saveSettings(); audio.syncMusic();
+  $('btn-sound').textContent = settings.sound ? '♪' : '✕';
+};
+$('btn-sound').textContent = settings.sound ? '♪' : '✕';
 $('btn-switch').onclick = () => ctl.switchBoard();
 $('btn-rotate').onclick = () => world.rotate();
 $('btn-tactical').onclick = () => world.toggleTactical();

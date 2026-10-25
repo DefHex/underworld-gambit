@@ -1,5 +1,7 @@
 import { BoardId, Game, Move, PieceType, Position, attacked, sqName } from '../rules';
 import { MarkerSet, World, emptyMarkers } from '../render/world';
+import * as audio from '../audio/audio';
+import { buzz } from '../platform/haptics';
 
 interface Preview {
   fell?: { type: PieceType; color: 0 | 1; sq: number };
@@ -31,7 +33,7 @@ export class Controller {
   setGame(g: Game): void {
     this.game = g;
     this.deselect();
-    this.world.syncPieces(g.pos, false);
+    this.world.reset(g.pos);
     this.refresh();
   }
 
@@ -54,7 +56,7 @@ export class Controller {
   private pointerUp(e: PointerEvent): void {
     const d = this.down;
     this.down = null;
-    if (!d || this.locked || this.world.gliding) return;
+    if (!d || this.locked || this.world.gliding || this.world.busy) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 12) {
@@ -87,6 +89,8 @@ export class Controller {
     if (b === this.world.active) return;
     this.deselect();
     this.world.setActive(b);
+    audio.setRealm(b);
+    audio.play('ui');
     this.refresh();
   }
 
@@ -97,6 +101,8 @@ export class Controller {
     this.selected = { b, sq };
     this.targets = this.game.legalMoves().filter((m) => m.board === b && m.from === sq);
     this.pending = null;
+    audio.play('select');
+    buzz('select');
     this.refresh();
   }
 
@@ -129,18 +135,30 @@ export class Controller {
   }
 
   play(move: Move): void {
-    this.game.play(move);
+    const { info } = this.game.play(move);
     this.selected = null;
     this.targets = [];
     this.pending = null;
-    this.world.syncPieces(this.pos, true);
+    audio.play(info.fell || info.rose || info.destroyed ? 'capture' : 'move');
+    this.world.playMove(move, info, this.pos);
+    this.afterMove();
     this.refresh();
   }
 
+  /** Check flash and checkmate slow motion, once the slide and transfer have played. */
+  afterMove(): void {
+    const s = this.game.status();
+    setTimeout(() => {
+      if (s.state === 'ongoing' && s.check) this.world.checkFlash(this.pos.kingSq[this.pos.side]);
+      if (s.state === 'checkmate') { audio.play('mate'); this.world.mateSlowmo(); }
+    }, 700);
+  }
+
   undo(): void {
+    if (this.world.busy) return;
     if (this.game.undo()) {
       this.deselect();
-      this.world.syncPieces(this.pos, false);
+      this.world.reset(this.pos);
       this.refresh();
     }
   }

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Easing, animating, clock, resetClockGap, start, tickTweens, tween, tweens } from './tween';
 import type { BoardId, Move, MoveInfo, Piece, Position } from '../rules';
 import { Fx } from './fx';
-import { addFrameProps } from './models';
-import { buildGildedFrame, buildHeavenGround, buildHellFrame, buildHellGround, hellTileMaterials, marbleTileMaterials } from './decor';
+import { addBoneFieldModels, buildTerrainProps, tileMaterial } from './terrain';
+import { buildGildedFrame, buildHeavenGround, buildHellFrame, buildHellGround } from './decor';
 import { Kit, pickStyle, restoreView } from './exec';
 import { settings } from '../platform/settings';
 import { PieceView, createPieceView, makeGhost, updatePieceView } from './pieces';
@@ -68,7 +68,7 @@ export class World {
     this.boards[1].position.y = -GAP;
     this.buildBoard(0);
     this.buildBoard(1);
-    void addFrameProps(this.boards[1]).then(() => this.invalidate());
+    void addBoneFieldModels(this.boards[1]).then(() => this.invalidate());
     this.boards.forEach((b, i) => b.add(this.markers[i]));
     window.addEventListener('resize', () => this.resize());
     this.resize();
@@ -79,20 +79,18 @@ export class World {
   private buildBoard(b: BoardId): void {
     const g = this.boards[b];
     const over = b === 0;
-    const mats = over ? marbleTileMaterials() : hellTileMaterials();
     const tileGeo = new THREE.BoxGeometry(0.98, 0.3, 0.98);
     for (let sq = 0; sq < 64; sq++) {
-      const pool = ((sq & 7) + (sq >> 3)) & 1 ? mats.light : mats.dark;
-      const t = new THREE.Mesh(tileGeo, pool[(sq * 7 + (sq >> 3)) % pool.length]);
+      const t = new THREE.Mesh(tileGeo, tileMaterial(over, sq));
       const [x, z] = sqPos(sq);
       t.position.set(x, -0.15, z);
       g.add(t);
       this.tiles[b].push(t);
     }
     if (over) {
-      g.add(buildGildedFrame(), buildHeavenGround());
+      g.add(buildGildedFrame(), buildHeavenGround(), buildTerrainProps(true));
     } else {
-      g.add(buildHellFrame(), buildHellGround());
+      g.add(buildHellFrame(), buildHellGround(), buildTerrainProps(false));
     }
     if (over) {
       g.add(new THREE.HemisphereLight(0xfff4de, 0xb0a080, 1.5));

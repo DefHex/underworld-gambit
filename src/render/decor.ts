@@ -4,7 +4,7 @@ import { glow, mesh } from './exec/props';
 
 /**
  * The Underworld look lives in the board itself: scorched ash and obsidian tiles veined with lava,
- * a riveted dark frame with a glowing lava inlay and spiked corners. The surroundings stay clean:
+ * a riveted dark frame with a glowing lava inlay. The surroundings stay clean:
  * a dark floor with a soft glow beneath the board. All generated in code, no third-party assets.
  */
 
@@ -81,7 +81,7 @@ export function hellTileMaterials(): { light: THREE.Material[]; dark: THREE.Mate
   return { light: build('ash'), dark: build('obsidian') };
 }
 
-/** Riveted dark frame, glowing lava inlay and four spiked corners. */
+/** Riveted dark frame with a glowing lava inlay. */
 export function buildHellFrame(): THREE.Group {
   const root = new THREE.Group();
   const frame = new THREE.Mesh(new THREE.BoxGeometry(8.7, 0.5, 8.7), new THREE.MeshToonMaterial({ color: 0x2a1f22 }));
@@ -103,15 +103,6 @@ export function buildHellFrame(): THREE.Group {
   }
   root.add(mesh(merge(rivets)));
 
-  const spikes: THREE.BufferGeometry[] = [];
-  const tips: THREE.BufferGeometry[] = [];
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const x = sx * 4.34, z = sz * 4.34;
-    spikes.push(cone(0.2, 0.9, 0x120c0f, { x, z, y: 0.15 }, 5), cyl(0.24, 0.28, 0.2, 0x2a1f22, { x, z, y: -0.1 }, 6));
-    tips.push(cone(0.07, 0.22, 0xff6a20, { x, z, y: 0.55 }, 5));
-  }
-  root.add(mesh(merge(spikes)));
-  root.add(new THREE.Mesh(merge(tips), glow(0xff7a30, 1)));
   return root;
 }
 
@@ -175,7 +166,7 @@ export function marbleTileMaterials(): { light: THREE.Material[]; dark: THREE.Ma
   return { light: build(true), dark: build(false) };
 }
 
-/** Gilded frame with a bright inlay and four pillar finials. */
+/** Plain gilded frame with a bright inlay. */
 export function buildGildedFrame(): THREE.Group {
   const root = new THREE.Group();
   const frame = new THREE.Mesh(new THREE.BoxGeometry(8.7, 0.5, 8.7), new THREE.MeshToonMaterial({ color: 0x9a7424 }));
@@ -187,13 +178,6 @@ export function buildGildedFrame(): THREE.Group {
     box(0.08, 0.03, len, 0xfff0b0, { x: e, y: -0.16 }), box(0.08, 0.03, len, 0xfff0b0, { x: -e, y: -0.16 }),
   ]);
   root.add(mesh(inlay));
-  const pillars: THREE.BufferGeometry[] = [];
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const x = sx * 4.34, z = sz * 4.34;
-    pillars.push(cyl(0.2, 0.26, 0.5, 0xe8dcc0, { x, z, y: 0.02 }, 8), cyl(0.27, 0.27, 0.07, 0xd9a93a, { x, z, y: -0.2 }, 8), cyl(0.27, 0.27, 0.07, 0xd9a93a, { x, z, y: 0.3 }, 8));
-    pillars.push(cone(0.12, 0.3, 0xe0b040, { x, z, y: 0.48 }, 6));
-  }
-  root.add(mesh(merge(pillars)));
   return root;
 }
 

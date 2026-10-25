@@ -1,6 +1,7 @@
 import { Game, PieceType, Status } from './rules';
 import { World } from './render/world';
 import { Controller } from './ui/controller';
+import { AiPlayer } from './ai/client';
 import * as audio from './audio/audio';
 import { buzz } from './platform/haptics';
 import { saveSettings, settings } from './platform/settings';
@@ -10,6 +11,34 @@ const canvas = $<HTMLCanvasElement>('stage');
 const world = new World(canvas);
 let game = new Game();
 const ctl = new Controller(world, game, canvas);
+const ai = new AiPlayer();
+
+/** 0 = pass-and-play, 1-4 = play White against the AI at that level. */
+let mode: 0 | 1 | 2 | 3 | 4 = 0;
+let thinking = false;
+let epoch = 0;
+
+async function aiTurn(): Promise<void> {
+  if (!mode || thinking || ctl.locked || ctl.pos.side !== 1) return;
+  if (world.busy) { setTimeout(aiTurn, 120); return; }
+  thinking = true;
+  const mine = ++epoch;
+  const g = ctl.game;
+  updateHud();
+  const move = await ai.think(g.save(), mode);
+  thinking = false;
+  if (mine !== epoch || g !== ctl.game) return;
+  if (move) ctl.play(move);
+  updateHud();
+}
+ctl.blocked = () => thinking || (mode > 0 && ctl.pos.side === 1);
+ctl.onMoved = () => { void aiTurn(); };
+
+function newGame(): void {
+  epoch++; thinking = false; ai.reset();
+  game = new Game({ secondChance: settings.secondChance });
+  ctl.setGame(game);
+}
 
 const turn = $('turn'), hint = $('hint'), banner = $('banner'), movelist = $('movelist');
 const frame = $('portal-frame'), label = $('portal-label'), promo = $('promo');
@@ -32,7 +61,7 @@ function layoutPortal(): void {
 function updateHud(): void {
   const s = ctl.game.status();
   const side = ctl.pos.side === 0 ? 'White' : 'Black';
-  turn.textContent = s.state === 'ongoing' ? `${side} to move${s.check ? ' — check!' : ''} · ${world.active === 0 ? 'Overworld' : 'Underworld'}` : 'Game over';
+  turn.textContent = thinking ? 'Black is thinking…' : s.state === 'ongoing' ? `${side} to move${s.check ? ' — check!' : ''} · ${world.active === 0 ? 'Overworld' : 'Underworld'}` : 'Game over';
   hint.textContent = ctl.hint;
   banner.hidden = s.state === 'ongoing';
   banner.textContent = statusText(s);
@@ -78,9 +107,18 @@ $('btn-sound').textContent = settings.sound ? '♪' : '✕';
 $('btn-switch').onclick = () => ctl.switchBoard();
 $('btn-rotate').onclick = () => world.rotate();
 $('btn-tactical').onclick = () => world.toggleTactical();
-$('btn-undo').onclick = () => ctl.undo();
+$('btn-undo').onclick = () => {
+  if (thinking || world.busy) return;
+  ctl.undo();
+  if (mode && ctl.pos.side === 1) ctl.undo(); // rewind a whole turn against the AI
+};
+$('btn-ai').onclick = () => {
+  mode = ((mode + 1) % 5) as typeof mode;
+  $('btn-ai').textContent = mode ? 'L' + mode : '2P';
+  newGame();
+};
 $('btn-moves').onclick = () => { movelist.hidden = !movelist.hidden; };
-$('btn-new').onclick = () => { game = new Game(); ctl.setGame(game); };
+$('btn-new').onclick = () => newGame();
 window.addEventListener('resize', () => { world.resize(); layoutPortal(); });
 
 world.syncPieces(game.pos, false);

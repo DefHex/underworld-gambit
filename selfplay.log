@@ -1,0 +1,8 @@
+npm notice run underworld-gambit@0.1.0 selfplay
+npm notice run node scripts/run-selfplay.mjs
+npm warn install-scripts .npmrc allow-scripts setting is being ignored because --allow-scripts was passed on the command line
+npm notice run underworld-gambit@0.1.0 npx
+npm notice run vitest run tests/selfplay
+
+ RUN  v5.0.5 C:/Users/Syuleyman/hyperframes-test/SadeVid/underworld-gambit
+

@@ -20,6 +20,9 @@ export class Controller {
   onChange: () => void = () => {};
   onPromotion: (choose: (p: PieceType) => void) => void = (c) => c('q');
   locked = false;
+  /** Extra input lock, e.g. while the AI is thinking. */
+  blocked: () => boolean = () => false;
+  onMoved: () => void = () => {};
 
   private down: { x: number; y: number; sq: number | null; own: boolean } | null = null;
 
@@ -56,7 +59,7 @@ export class Controller {
   private pointerUp(e: PointerEvent): void {
     const d = this.down;
     this.down = null;
-    if (!d || this.locked || this.world.gliding || this.world.busy) return;
+    if (!d || this.locked || this.world.gliding || this.world.busy || this.blocked()) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 12) {
@@ -143,6 +146,7 @@ export class Controller {
     this.world.playMove(move, info, this.pos);
     this.afterMove();
     this.refresh();
+    this.onMoved();
   }
 
   /** Check flash and checkmate slow motion, once the slide and transfer have played. */

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Underworld Gambit</title>
+  <link rel="stylesheet" href="/src/ui/style.css" />
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="portal-frame"><span id="portal-label">Underworld</span></div>
+  <div id="turn"></div>
+  <div id="hint"></div>
+  <div id="toolbar">
+    <button id="btn-switch" title="Switch board">⇅</button>
+    <button id="btn-rotate" title="Rotate view">↻</button>
+    <button id="btn-tactical" title="Tactical view">▦</button>
+    <button id="btn-undo" title="Undo">↶</button>
+    <button id="btn-moves" title="Move list">≡</button>
+    <button id="btn-new" title="New game">＋</button>
+  </div>
+  <div id="movelist" hidden></div>
+  <div id="promo" hidden></div>
+  <div id="banner" hidden></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

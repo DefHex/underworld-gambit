@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build: type-check and bundle the web game ----
-FROM node:22-alpine AS build
+FROM node:latest AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

@@ -61,9 +61,15 @@ docker compose up -d --build        # serves the game on http://<host>:8080
 docker build -t underworld-gambit . && docker run -d -p 8080:80 --restart unless-stopped underworld-gambit
 ```
 
-The image is a two-stage build (node:22-alpine builds, nginx:1.27-alpine serves `dist/`) with a `/healthz` endpoint and long cache headers on fingerprinted assets. For HTTPS put a reverse proxy in front (Caddy is the simplest: `game.example.com { reverse_proxy localhost:8080 }`). Audio needs HTTPS or localhost to start in some browsers.
+The image is a two-stage build (`node:latest` builds, `nginx:1.27-alpine` serves `dist/`; `node:latest` is unpinned on purpose, so pin a major version if a Node upgrade ever breaks the build) with a `/healthz` endpoint and long cache headers on fingerprinted assets. For HTTPS put a reverse proxy in front (Caddy is the simplest: `game.example.com { reverse_proxy localhost:8080 }`). Audio needs HTTPS or localhost to start in some browsers.
 
 > Status: the Dockerfile, nginx.conf and compose file were written but **not yet built or run** (no Docker daemon was available where they were authored). First thing to do on a machine with Docker: build, run, and open the game, and fix anything that breaks.
+
+## CI/CD (GitHub Actions)
+
+- `.github/workflows/docker.yml` builds the Docker image on every push and pull request, and publishes it to GHCR as `ghcr.io/defhex/underworld-gambit` (tags: `latest` on the default branch, the commit sha, and `v*` release tags). Pull on the VPS with `docker pull ghcr.io/defhex/underworld-gambit:latest`. The package is private; log in first with a personal access token that has `read:packages`.
+- `.github/workflows/pages.yml` runs the tests, builds the site and deploys `dist/` to GitHub Pages. Pages serves static files, so it publishes the web build, not the Docker image. One-time setup: repository Settings, then Pages, then Source: **GitHub Actions**. Pages for a private repository needs a paid GitHub plan.
+- Both run on pushes to `master` or `main` and can be started by hand from the Actions tab.
 
 ## Architecture
 

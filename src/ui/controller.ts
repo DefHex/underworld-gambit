@@ -23,6 +23,8 @@ export class Controller {
   /** Extra input lock, e.g. while the AI is thinking. */
   blocked: () => boolean = () => false;
   onMoved: () => void = () => {};
+  /** The game just ended: the winner's color, or null for a draw. */
+  onEnd: (winner: 0 | 1 | null) => void = () => {};
   /** Tutorial: when set, only this move can be made, and it is highlighted. */
   guide: { b: BoardId; from: number; to: number } | null = null;
   onWrong: (why: 'piece' | 'target' | 'empty') => void = () => {};
@@ -165,7 +167,7 @@ export class Controller {
     this.selected = null;
     this.targets = [];
     this.pending = null;
-    audio.play(info.fell || info.rose || info.destroyed ? 'capture' : 'move');
+    audio.play(move.castle ? 'castle' : info.fell || info.rose || info.destroyed ? 'capture' : 'move');
     this.world.playMove(move, info, this.pos);
     this.afterMove();
     this.refresh();
@@ -178,6 +180,7 @@ export class Controller {
     setTimeout(() => {
       if (s.state === 'ongoing' && s.check) this.world.checkFlash(this.pos.kingSq[this.pos.side]);
       if (s.state === 'checkmate') { audio.play('mate'); this.world.mateSlowmo(); }
+      if (s.state !== 'ongoing') this.onEnd(s.state === 'checkmate' || s.state === 'resigned' ? s.winner : null);
     }, 700);
   }
 

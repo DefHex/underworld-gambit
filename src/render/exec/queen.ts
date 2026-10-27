@@ -38,6 +38,7 @@ class Lash {
   coil(): void { const H = this.H(); this.set(H.clone().add(V(0.05, -0.18, 0.18)), 0.05); }
   /** Wind up over the shoulder. */
   async windUp(ms = 260): Promise<void> {
+    this.k.sfx('whoosh');
     await this.k.tw(ms, (u) => {
       const H = this.H();
       this.set(H.clone().add(V(0, 0.9 + 0.5 * u, 0)).addScaledVector(this.k.dir, -0.9 * u), 0.7, 0.1 * u, u * 4);
@@ -55,6 +56,7 @@ class Lash {
     this.crackAt(at());
   }
   crackAt(p: THREE.Vector3): void {
+    this.k.sfx('whip');
     this.k.flash(p, 0xfff0c0, 0.5, 150);
     this.k.ring(p.clone().setY(0.1), 0xffffff, 0.9, 260);
     this.k.shake(0.05);

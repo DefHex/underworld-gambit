@@ -119,7 +119,17 @@ world.onEvent = (e) => {
   else if (e === 'rise') { audio.play('rise'); buzz('rise'); }
   else if (e === 'destroy') audio.play('destroy');
   else if (e === 'check') { audio.play('check'); buzz('check'); }
+  else if (e === 'promote') audio.play('promote');
 };
+// Result jingle shortly after the mate / draw sound.
+ctl.onEnd = (winner) => {
+  setTimeout(() => {
+    if (winner === null) audio.play('draw');
+    else audio.play(mode === 0 || winner === 0 ? 'victory' : 'defeat');
+  }, winner === null ? 0 : 1500);
+};
+// A soft tick on every toolbar button.
+for (const b of Array.from(document.querySelectorAll('#toolbar button'))) b.addEventListener('click', () => audio.play('ui'));
 // Browsers only allow audio after a gesture.
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 $('btn-sound').onclick = () => {
@@ -150,7 +160,7 @@ world.applyView(false);
 ctl.refresh();
 
 // Handles for browser tests.
-(window as unknown as { __uw: unknown }).__uw = { world, ctl, settings, styleDebug, get game() { return ctl.game; } };
+(window as unknown as { __uw: unknown }).__uw = { world, ctl, settings, styleDebug, audio, get game() { return ctl.game; } };
 
 // ---------- welcome screen ----------
 const menu = $('menu'), menuMain = $('menu-main'), menuLevel = $('menu-level');
@@ -176,7 +186,7 @@ function startGame(m: 0 | 1 | 2 | 3 | 4): void {
   mode = m;
   if (m) { settings.aiLevel = m; saveSettings(); }
   audio.unlock();
-  audio.play('ui');
+  audio.play('start');
   ctl.goTo(0);
   newGame();
   menu.classList.add('leaving');
@@ -204,7 +214,7 @@ function startTutorial(): void {
   mode = 0;
   epoch++; thinking = false; ai.reset();
   audio.unlock();
-  audio.play('ui');
+  audio.play('start');
   if (world.dual) world.toggleTactical();
   ctl.goTo(0);
   game = tutorialGame();

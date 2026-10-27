@@ -169,6 +169,7 @@ const kill8: Style = {
     await k.tw(260, (u) => { k.a.rotation.x = -0.3 * u; }, Easing.Cubic.Out); // king raises a hand
     await k.wait(180);
     await k.tw(220, (u) => { b.position.y = 4.5 - 4.2 * u; }, Easing.Quadratic.In);
+    k.sfx('clang');
     k.flash(k.to.clone().setY(0.4), 0xffffff, 1, 180);
     void k.hit('topple', {}, 0.3);
     await k.wait(300);

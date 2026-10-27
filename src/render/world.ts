@@ -52,7 +52,7 @@ export class World {
   portalRect = { x: 0, y: 0, w: 220, h: 124 }; // css pixels, top-left origin
   fx: Fx;
   /** Fired at the impact moment of an effect, for sound and haptics. */
-  onEvent: (e: 'fall' | 'rise' | 'destroy' | 'move' | 'check') => void = () => {};
+  onEvent: (e: 'fall' | 'rise' | 'destroy' | 'move' | 'check' | 'promote') => void = () => {};
   shakeAmp = 0;
   zoom = 1;
   pending = 0;
@@ -209,6 +209,7 @@ export class World {
     const finish = () => {
       this.syncPieces(pos, false);
       if (move.promo) {
+        this.onEvent('promote');
         const [px, pz] = sqPos(move.to);
         this.fx.burst(new THREE.Vector3(px, (move.board ? -GAP : 0) + 0.3, pz), 'gold', 30);
       }

@@ -1,4 +1,5 @@
 import { BoardId, parseSq } from '../rules';
+import { play } from '../audio/audio';
 import type { World } from '../render/world';
 import { LINE, Mv, findMove } from '../tutorial/script';
 import type { Controller } from './controller';
@@ -111,7 +112,7 @@ export class Tutorial {
       const el = document.createElement('button');
       el.textContent = b.label;
       el.className = b.primary ? 'primary' : '';
-      el.onclick = b.run;
+      el.onclick = () => { play('ui'); b.run(); };
       box.appendChild(el);
     }
   }
@@ -177,6 +178,7 @@ export class Tutorial {
 
   /** A tap on the board when it is not the player's turn to act: draw the eye back to the card. */
   private pulseCard(): void {
+    play('wrong');
     const el = $('coach');
     el.classList.remove('nudge');
     void el.offsetWidth;
@@ -186,6 +188,7 @@ export class Tutorial {
   private nudge(why: 'piece' | 'target' | 'empty'): void {
     const s = STEPS[this.i];
     if (s?.t !== 'move') return;
+    play('wrong');
     const msg = why === 'target' ? 'Not that square. Tap the glowing gold ring.' : 'Not that piece. Start with the gold ring.';
     const t = $('coach-text');
     const keep = s.text;

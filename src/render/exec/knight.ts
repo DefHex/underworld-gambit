@@ -8,6 +8,7 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 /** Gallop along the line between two fractions, with hoof bounces and a rocking body. */
 function gallop(k: Kit, ms: number, u0: number, u1: number, hop = 0.16, ease: (n: number) => number = Easing.Quadratic.InOut): Promise<void> {
   k.face();
+  k.sfx('gallop');
   const beats = Math.max(2, Math.round(Math.abs(u1 - u0) * k.dist * 2.2));
   const dustAt = Math.max(2, Math.round(ms / 90));
   let n = 0;
@@ -38,7 +39,7 @@ function holdSword(k: Kit) {
   s.rotation.x = -0.3;
   return s;
 }
-const slash = (k: Kit, p: THREE.Vector3, hex = 0xffffff) => { k.flash(p, hex, 0.5, 140); k.burst(p, 'white', 8, { speed: 1.3 }); };
+const slash = (k: Kit, p: THREE.Vector3, hex = 0xffffff) => { k.sfx('slash'); k.flash(p, hex, 0.5, 140); k.burst(p, 'white', 8, { speed: 1.3 }); };
 
 const move1: Style = {
   name: 'Gallop leap',

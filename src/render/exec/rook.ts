@@ -9,6 +9,7 @@ const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 /** The rook unfolds into a tank: tower hidden, tank popped in at its feet. */
 async function morph(k: Kit): Promise<Tank> {
   k.face();
+  k.sfx('engine');
   const t = k.put(tank(PAL[k.a.userData.color].base), k.rig);
   k.bodyVisible(false);
   t.scale.setScalar(0.2);
@@ -38,6 +39,7 @@ function local(k: Kit, o: THREE.Object3D): THREE.Vector3 {
 /** Recoil, muzzle flash, and a shell flying to `target`. Resolves when it lands. */
 async function fire(k: Kit, t: Tank, target: THREE.Vector3, ms = 240, hump = 0.25): Promise<void> {
   const m = local(k, t.userData.muzzle);
+  k.sfx('cannon');
   k.flash(m, 0xffd070, 0.45, 160);
   k.burst(m, 'fire', 8, { speed: 1.2 });
   k.shake(0.06);
@@ -194,6 +196,7 @@ const kill8: Style = {
     k.face();
     if (k.dist > 1.7) { dust(k, 380); await driveTo(k, 360, 0, 0.45, Easing.Cubic.Out); }
     const m = () => local(k, t.userData.muzzle);
+    k.sfx('fire');
     k.every(800, () => {
       const p = m();
       k.burst(p, 'fire', 10, { speed: 1.5, spread: Math.PI / 10, life: 0.7 });

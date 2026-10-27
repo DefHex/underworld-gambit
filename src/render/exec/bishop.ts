@@ -17,6 +17,7 @@ function strap(k: Kit): Rocket {
 
 async function ignite(k: Kit, r: Rocket, ms = 260): Promise<void> {
   k.face();
+  k.sfx('rocket');
   k.burst(k.from.clone().setY(0.1), 'smoke', 20, { spread: Math.PI / 2 });
   k.shake(0.05);
   await k.tw(ms, (u) => {
@@ -67,6 +68,7 @@ async function tumbleDown(k: Kit, r: Rocket): Promise<void> {
 }
 
 function chuteOpen(k: Kit): THREE.Group {
+  k.sfx('chute');
   const c = k.put(parachute(), k.a);
   c.position.y = 1.0;
   c.scale.setScalar(0.01);

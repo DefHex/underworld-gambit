@@ -16,7 +16,7 @@ function march(k: Kit, ms: number, u0: number, u1: number, hop = 0.14, ease: (n:
   }, ease);
 }
 const hold = (k: Kit, o: THREE.Object3D, x = 0.22, y = 0.35, z = 0.1) => { const p = k.put(o, k.rig); p.position.set(x, y, z); return p; };
-const spark = (k: Kit, p: THREE.Vector3, hex = 0xffffff) => { k.flash(p, hex, 0.45, 140); k.burst(p, 'white', 6, { speed: 1.2 }); };
+const spark = (k: Kit, p: THREE.Vector3, hex = 0xffffff) => { k.sfx('slash'); k.flash(p, hex, 0.45, 140); k.burst(p, 'white', 6, { speed: 1.2 }); };
 
 const move1: Style = {
   name: 'Soldier march',

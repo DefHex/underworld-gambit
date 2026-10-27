@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { play, Sfx } from '../../audio/audio';
 import type { Palette } from '../fx';
 import { PAL, PieceView } from '../pieces';
 import { Easing, start, tween } from '../tween';
@@ -88,6 +89,9 @@ export class Kit {
 
   // ---------- effects ----------
 
+  /** Plays a sound effect (respects the sound setting). */
+  sfx(name: Sfx): void { play(name); }
+
   world(p: V3): V3 { return p.clone().add(this.g.position); }
   burst(p: V3, pal: Palette, n = 20, o: { speed?: number; spread?: number; life?: number } = {}): void {
     this.w.fx.burst(this.world(p), pal, n, o);
@@ -116,6 +120,7 @@ export class Kit {
   hit(r: Reaction, o: ReactOpts = {}, shake = 0.14): Promise<void> {
     this.hitCalled = true;
     this.onImpact();
+    play(REACTION_SOUND[r]);
     this.shake(shake);
     if (this.v) this.reaction = REACTIONS[r](this, this.v, { dir: this.dir, power: 1, ...o });
     return this.reaction;
@@ -152,6 +157,10 @@ function spawnDebris(k: Kit, v: PieceView, n: number) {
     return { m, vel, spin };
   });
 }
+
+const REACTION_SOUND: Record<Reaction, Sfx> = {
+  squash: 'stomp', launch: 'smack', topple: 'thud', explode: 'explosion', burn: 'fire', zap: 'zap', hoist: 'whip', spin: 'whoosh',
+};
 
 const REACTIONS: Record<Reaction, (k: Kit, v: PieceView, o: Required<ReactOpts>) => Promise<void>> = {
   async squash(k, v) {

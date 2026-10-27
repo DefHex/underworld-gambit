@@ -42,3 +42,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0710; col
 #banner { position: fixed; top: 38%; left: 50%; transform: translate(-50%,-50%); padding: 14px 28px;
   border-radius: 12px; background: rgba(10,6,16,.9); border: 2px solid var(--gold); font-size: 22px;
   text-align: center; font-family: Cinzel, Georgia, serif; }
+
+/* Portrait phones: the board is fitted by width; the toolbar becomes a bottom bar. */
+@media (orientation: portrait) {
+  #toolbar { left: 50%; top: auto; bottom: calc(var(--sab) + 8px); transform: translateX(-50%); flex-direction: row;
+    max-height: none; width: 94vw; max-width: 430px; justify-content: center; gap: 5px; }
+  #toolbar button { width: 36px; height: 36px; font-size: 16px; }
+  #hint { bottom: calc(var(--sab) + 132px); max-width: 90vw; }
+  #movelist { top: calc(var(--sat) + 44px); }
+  #turn { max-width: 92vw; font-size: 12px; text-align: center; }
+}

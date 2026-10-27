@@ -55,6 +55,7 @@ export class World {
   lastStyle = '';
   /** Animations in flight, so a reset can clear their props. */
   private kits = new Set<Kit>();
+  private lastPortrait = false;
   private dirty = true;
   private running = false;
   private lastT = 0;
@@ -328,17 +329,24 @@ export class World {
     cam.position.copy(center).addScaledVector(dir, 40);
     cam.up.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     cam.lookAt(center);
-    cam.top = height / 2; cam.bottom = -height / 2;
-    cam.left = -height * aspect / 2; cam.right = height * aspect / 2;
+    // On narrow (portrait) screens fit the board by width so it is never cut off at the sides.
+    const h = Math.max(height, (this.portrait ? 9.8 : 13) / aspect);
+    cam.top = h / 2; cam.bottom = -h / 2;
+    cam.left = -h * aspect / 2; cam.right = h * aspect / 2;
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
   }
 
+  /** Tall screens: a portrait phone. */
+  get portrait(): boolean { return this.canvas.clientHeight > this.canvas.clientWidth; }
+  private pitch(): number { return this.tactical ? 90 : this.portrait ? 42 : 30; }
+
   private targetView(): ViewState {
-    const base = this.tactical ? 0 : 45;
+    // Landscape uses the 2:1 isometric diamond; portrait looks square-on so the board uses the width.
+    const base = this.tactical || this.portrait ? 0 : 45;
     return {
       yaw: base + this.rotation * 90,
-      pitch: this.tactical ? 90 : 30,
+      pitch: this.pitch(),
       cy: this.active === 0 ? 0 : -GAP,
     };
   }
@@ -395,7 +403,10 @@ export class World {
     this.renderer.setSize(w, h, false);
     const pw = Math.min(230, Math.round(w * 0.27));
     const ph = Math.round(pw * 0.58);
-    this.portalRect = { x: w - pw - 14, y: h - ph - 14, w: pw, h: ph };
+    // In portrait the toolbar takes a bar along the bottom, so the portal sits above it.
+    const portrait = h > w;
+    if (portrait !== this.lastPortrait) { this.lastPortrait = portrait; this.applyView(false); }
+    this.portalRect = { x: w - pw - 14, y: h - ph - (portrait ? 118 : 14), w: pw, h: ph };
     this.invalidate();
   }
 
@@ -453,7 +464,7 @@ export class World {
 
     if (this.portalEnabled) {
       const p = this.portalRect;
-      const pv: ViewState = { yaw: this.view.yaw, pitch: this.tactical ? 90 : 30, cy: other === 0 ? 0 : -GAP };
+      const pv: ViewState = { yaw: this.view.yaw, pitch: this.pitch(), cy: other === 0 ? 0 : -GAP };
       this.frame(this.portalCam, p.w / p.h, pv, FRUSTUM_H + 0.6);
       r.setScissorTest(true);
       const y = h - p.y - p.h;

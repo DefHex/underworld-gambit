@@ -13,6 +13,8 @@ const FRUSTUM_H = 8.2; // world units visible vertically in the main view
 
 export const sqPos = (sq: number): [number, number] => [(sq & 7) - 3.5, 3.5 - (sq >> 3)];
 
+export interface Rect { x: number; y: number; w: number; h: number }
+
 export interface MarkerSet {
   selected?: { b: BoardId; sq: number };
   quiet: { b: BoardId; sq: number }[];
@@ -321,7 +323,7 @@ export class World {
     const yaw = THREE.MathUtils.degToRad(state.yaw);
     const pitch = THREE.MathUtils.degToRad(state.pitch);
     const center = new THREE.Vector3(0, state.cy, 0);
-    if (cam === this.mainCam && this.shakeAmp > 0.001) {
+    if ((cam === this.mainCam || this.tactical) && this.shakeAmp > 0.001) {
       center.x += (Math.random() - 0.5) * this.shakeAmp;
       center.y += (Math.random() - 0.5) * this.shakeAmp;
     }
@@ -330,7 +332,10 @@ export class World {
     cam.up.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     cam.lookAt(center);
     // On narrow (portrait) screens fit the board by width so it is never cut off at the sides.
-    const h = Math.max(height, (this.portrait ? 9.8 : 13) / aspect);
+    const h = Math.max(height, (this.tactical ? 9.4 : this.portrait ? 9.8 : 13) / aspect);
+    // Top view shows both boards at once; clip each camera to its own slab so the other board's particles never show through.
+    cam.near = this.tactical ? 33 : 0.1;
+    cam.far = this.tactical ? 46 : 200;
     cam.top = h / 2; cam.bottom = -h / 2;
     cam.left = -h * aspect / 2; cam.right = h * aspect / 2;
     cam.updateProjectionMatrix();
@@ -366,16 +371,44 @@ export class World {
 
   setActive(b: BoardId): void { this.active = b; this.applyView(); }
   rotate(): void { this.rotation++; this.applyView(); }
-  toggleTactical(): void { this.tactical = !this.tactical; this.applyView(); }
+  toggleTactical(): void {
+    this.tactical = !this.tactical;
+    this.applyView(!this.tactical);
+    this.invalidate();
+  }
+
+  /** Top view shows both boards at once, so nothing needs switching. */
+  get dual(): boolean { return this.tactical; }
+
+  /** Screen rectangles (css px) for the Overworld and Underworld in top view: side by side on wide screens, stacked on tall ones. */
+  dualRects(): [Rect, Rect] {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (w >= h) {
+      const left = 58, right = 8, top = 30, bottom = 8, gap = 8;
+      const rw = (w - left - right - gap) / 2, rh = h - top - bottom;
+      return [{ x: left, y: top, w: rw, h: rh }, { x: left + rw + gap, y: top, w: rw, h: rh }];
+    }
+    const side = 6, top = 34, bottom = 112, gap = 8;
+    const rw = w - side * 2, rh = (h - top - bottom - gap) / 2;
+    return [{ x: side, y: top, w: rw, h: rh }, { x: side, y: top + rh + gap, w: rw, h: rh }];
+  }
+
+  private dualCam(b: BoardId): THREE.OrthographicCamera {
+    const rc = this.dualRects()[b];
+    const cam = b === 0 ? this.mainCam : this.portalCam;
+    this.frame(cam, rc.w / rc.h, { yaw: this.rotation * 90, pitch: 70, cy: b ? -GAP : 0 }, 9.4 * this.zoom);
+    return cam;
+  }
 
   // ---------- picking ----------
 
   /** Projects a screen point onto a board's plane and snaps to the nearest square center. */
-  pickSquare(clientX: number, clientY: number, board: BoardId): number | null {
+  pickSquare(clientX: number, clientY: number, board: BoardId, cam: THREE.OrthographicCamera = this.mainCam, rect?: Rect): number | null {
     const r = this.canvas.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    const rc = rect ?? { x: 0, y: 0, w: r.width, h: r.height };
+    const ndc = new THREE.Vector2(((clientX - r.left - rc.x) / rc.w) * 2 - 1, -((clientY - r.top - rc.y) / rc.h) * 2 + 1);
     const ray = new THREE.Raycaster();
-    ray.setFromCamera(ndc, this.mainCam);
+    ray.setFromCamera(ndc, cam);
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), board === 0 ? 0 : GAP);
     const hit = new THREE.Vector3();
     if (!ray.ray.intersectPlane(plane, hit)) return null;
@@ -386,9 +419,28 @@ export class World {
     return Math.min(7, Math.max(0, rk)) * 8 + Math.min(7, Math.max(0, f));
   }
 
-  /** Screen position (css px) of a square's center on the active board, for HUD anchoring. */
+  /** Which board and square a screen point is on. In top view that can be either board. */
+  pick(clientX: number, clientY: number): { b: BoardId; sq: number } | null {
+    if (this.dual) {
+      const r = this.canvas.getBoundingClientRect();
+      const px = clientX - r.left, py = clientY - r.top;
+      const rects = this.dualRects();
+      for (const b of [0, 1] as BoardId[]) {
+        const rc = rects[b];
+        if (px < rc.x || px > rc.x + rc.w || py < rc.y || py > rc.y + rc.h) continue;
+        const sq = this.pickSquare(clientX, clientY, b, this.dualCam(b), rc);
+        return sq === null ? null : { b, sq };
+      }
+      return null;
+    }
+    if (this.inPortal(clientX, clientY)) return null;
+    const sq = this.pickSquare(clientX, clientY, this.active);
+    return sq === null ? null : { b: this.active, sq };
+  }
+
+  /** True when a point is inside the corner portal. */
   inPortal(clientX: number, clientY: number): boolean {
-    if (!this.portalEnabled) return false;
+    if (!this.portalEnabled || this.dual) return false;
     const r = this.canvas.getBoundingClientRect();
     const p = this.portalRect;
     const x = clientX - r.left, y = clientY - r.top;
@@ -446,10 +498,34 @@ export class World {
     requestAnimationFrame(tick);
   }
 
+  private renderDual(w: number, h: number): void {
+    const r = this.renderer;
+    r.setScissorTest(false);
+    r.setViewport(0, 0, w, h);
+    r.setClearColor(0x0b0710, 1);
+    r.clear();
+    const rects = this.dualRects();
+    for (const b of [0, 1] as BoardId[]) {
+      const rc = rects[b];
+      const cam = this.dualCam(b);
+      const y = h - rc.y - rc.h;
+      r.setScissorTest(true);
+      r.setViewport(rc.x, y, rc.w, rc.h);
+      r.setScissor(rc.x, y, rc.w, rc.h);
+      this.boards[0].visible = b === 0;
+      this.boards[1].visible = b === 1;
+      this.scene.fog = REALM[b].fog;
+      this.scene.background = new THREE.Color(REALM[b].bg);
+      r.render(this.scene, cam);
+    }
+    r.setScissorTest(false);
+  }
+
   private render(): void {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     if (!w || !h) return;
     const r = this.renderer;
+    if (this.dual) { this.renderDual(w, h); return; }
     const other = (1 - this.active) as BoardId;
     this.frame(this.mainCam, w / h, this.view, FRUSTUM_H * this.zoom);
 

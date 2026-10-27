@@ -52,3 +52,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0710; col
   #movelist { top: calc(var(--sat) + 44px); }
   #turn { max-width: 92vw; font-size: 12px; text-align: center; }
 }
+
+/* Top view: both boards on screen, each with a small name tag. */
+.board-label { position: fixed; padding: 2px 9px; border-radius: 10px; background: rgba(10,6,16,.72); color: var(--gold);
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
+.board-label[hidden] { display: none; }

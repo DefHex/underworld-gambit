@@ -108,6 +108,9 @@ scripts/       gen-audio.mjs, selfplay.ts, run-selfplay.mjs
 - `index.ts` — `pickStyle()` picks randomly, never the same one twice in a row. The 🎬 button (`settings.cinematic`) switches to plain slides.
 - To add a style: write it in the piece's file, add it to the `kills`/`moves` array, run it (see Testing the animations).
 
+### Views
+Isometric (landscape) shows one board plus a corner portal. Portrait phones use a square-on camera fitted by width. **Top view** (the ▦ button) is a dual view: both boards on screen at once, side by side on wide screens and stacked on tall ones, both playable (`World.dual`, `dualRects()`, `pick()` returns the board and square under a tap). Each top-view camera is clipped to its own slab so the other board's particles never show through.
+
 ### Terrain
 `terrain.ts` has two 8×8 character maps. Overworld: `g` grass, `f` forest, `m` mountain, `h` hills, `r` river. Underworld: `a` ash, `l` lava, `m` obsidian ridge, `f` dead forest, `b` bone field. Light/dark squares get a contrast overlay so the checker stays readable. Features are small and at tile corners; every tile top is at y = 0 so animations can assume one ground height.
 

@@ -24,7 +24,7 @@ export class Controller {
   blocked: () => boolean = () => false;
   onMoved: () => void = () => {};
 
-  private down: { x: number; y: number; sq: number | null; own: boolean } | null = null;
+  private down: { x: number; y: number; hit: { b: BoardId; sq: number } | null; own: boolean } | null = null;
 
   constructor(private world: World, game: Game, private canvas: HTMLCanvasElement) {
     this.game = game;
@@ -44,16 +44,16 @@ export class Controller {
 
   // ---------- input ----------
 
-  private ownPieceAt(sq: number | null): boolean {
+  private ownPieceAt(sq: number | null, b: BoardId = this.world.active): boolean {
     if (sq === null) return false;
-    const p = this.pos.boards[this.world.active][sq];
+    const p = this.pos.boards[b][sq];
     return !!p && p.color === this.pos.side;
   }
 
   private pointerDown(e: PointerEvent): void {
     this.canvas.setPointerCapture(e.pointerId);
-    const sq = this.world.inPortal(e.clientX, e.clientY) ? null : this.world.pickSquare(e.clientX, e.clientY, this.world.active);
-    this.down = { x: e.clientX, y: e.clientY, sq, own: this.ownPieceAt(sq) };
+    const hit = this.world.pick(e.clientX, e.clientY);
+    this.down = { x: e.clientX, y: e.clientY, hit, own: !!hit && this.ownPieceAt(hit.sq, hit.b) };
   }
 
   private pointerUp(e: PointerEvent): void {
@@ -64,32 +64,33 @@ export class Controller {
     const dist = Math.hypot(dx, dy);
     if (dist < 12) {
       if (this.world.inPortal(e.clientX, e.clientY)) return this.switchBoard();
-      return this.tap(this.world.pickSquare(e.clientX, e.clientY, this.world.active));
+      const hit = this.world.pick(e.clientX, e.clientY);
+      return this.tap(hit ? hit.sq : null, hit ? hit.b : undefined);
     }
-    if (d.own && d.sq !== null) {
-      // Drag and drop: pick up, drop on a target.
-      this.select(d.sq);
-      const to = this.world.pickSquare(e.clientX, e.clientY, this.world.active);
-      if (to !== null && to !== d.sq) this.attempt(to, true);
+    if (d.own && d.hit) {
+      // Drag and drop: pick up, drop on a target (on the same board).
+      this.select(d.hit.sq, d.hit.b);
+      const to = this.world.pick(e.clientX, e.clientY);
+      if (to && to.b === d.hit.b && to.sq !== d.hit.sq) this.attempt(to.sq, true);
       return;
     }
-    if (Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+    if (!this.world.dual && Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx) * 1.5) {
       // Swipe up goes to the board above, down to the board below.
       this.goTo(dy < 0 ? 0 : 1);
     }
   }
 
-  tap(sq: number | null): void {
+  tap(sq: number | null, b: BoardId = this.world.active): void {
     if (sq === null) return this.deselect();
-    if (this.selected && this.attempt(sq, false)) return;
-    if (this.ownPieceAt(sq)) this.select(sq);
+    if (this.selected && this.selected.b === b && this.attempt(sq, false)) return;
+    if (this.ownPieceAt(sq, b)) this.select(sq, b);
     else this.deselect();
   }
 
   switchBoard(): void { this.goTo((1 - this.world.active) as BoardId); }
 
   goTo(b: BoardId): void {
-    if (b === this.world.active) return;
+    if (this.world.dual || b === this.world.active) return;
     this.deselect();
     this.world.setActive(b);
     audio.setRealm(b);
@@ -99,8 +100,7 @@ export class Controller {
 
   // ---------- selection & moves ----------
 
-  private select(sq: number): void {
-    const b = this.world.active;
+  private select(sq: number, b: BoardId = this.world.active): void {
     this.selected = { b, sq };
     this.targets = this.game.legalMoves().filter((m) => m.board === b && m.from === sq);
     this.pending = null;
@@ -189,7 +189,7 @@ export class Controller {
   refresh(): void {
     const w = this.world, pos = this.pos;
     const mk: MarkerSet = emptyMarkers();
-    const b = w.active;
+    const b = this.selected?.b ?? w.active;
     let preview: Preview | null = null;
     if (this.selected) {
       mk.selected = this.selected;
@@ -202,7 +202,7 @@ export class Controller {
       }
     }
     // Threat markers go on the other board, where the portal shows them.
-    const other = (1 - b) as BoardId;
+    const other = (w.dual ? 1 : 1 - b) as BoardId;
     const me = pos.side;
     pos.boards[other].forEach((p, sq) => {
       if (p && p.color === me && p.type !== 'k' && attacked(pos.boards[other], sq, (1 - me) as 0 | 1)) {

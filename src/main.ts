@@ -62,7 +62,7 @@ function layoutPortal(): void {
 function updateHud(): void {
   const s = ctl.game.status();
   const side = ctl.pos.side === 0 ? 'White' : 'Black';
-  turn.textContent = thinking ? 'Black is thinking…' : s.state === 'ongoing' ? `${side} to move${s.check ? ' — check!' : ''} · ${world.active === 0 ? 'Overworld' : 'Underworld'}` : 'Game over';
+  turn.textContent = thinking ? 'Black is thinking…' : s.state === 'ongoing' ? `${side} to move${s.check ? ' — check!' : ''}${world.dual ? '' : ' · ' + (world.active === 0 ? 'Overworld' : 'Underworld')}` : 'Game over';
   hint.textContent = ctl.hint;
   banner.hidden = s.state === 'ongoing';
   banner.textContent = statusText(s);
@@ -70,6 +70,12 @@ function updateHud(): void {
   label.textContent = world.active === 0 ? 'Underworld' : 'Overworld';
   frame.className = ctl.locked ? '' : (ctl.portalAlert() ?? '');
   layoutPortal();
+  // Top view shows both boards, so the corner portal gives way to two name tags.
+  frame.style.display = world.dual ? 'none' : '';
+  for (const [i, el] of [$('lbl-over'), $('lbl-under')].entries()) {
+    el.hidden = !world.dual;
+    if (world.dual) { const rc = world.dualRects()[i]; el.style.left = rc.x + 6 + 'px'; el.style.top = rc.y + 4 + 'px'; }
+  }
   movelist.innerHTML = '';
   ctl.game.history.forEach((h, i) => {
     const d = document.createElement('div');
@@ -111,7 +117,7 @@ cineBtn.onclick = () => { settings.cinematic = !settings.cinematic; saveSettings
 paintCine();
 $('btn-switch').onclick = () => ctl.switchBoard();
 $('btn-rotate').onclick = () => world.rotate();
-$('btn-tactical').onclick = () => world.toggleTactical();
+$('btn-tactical').onclick = () => { world.toggleTactical(); ctl.deselect(); updateHud(); };
 $('btn-undo').onclick = () => {
   if (thinking || world.busy) return;
   ctl.undo();
@@ -124,7 +130,7 @@ $('btn-ai').onclick = () => {
 };
 $('btn-moves').onclick = () => { movelist.hidden = !movelist.hidden; };
 $('btn-new').onclick = () => newGame();
-window.addEventListener('resize', () => { world.resize(); layoutPortal(); });
+window.addEventListener('resize', () => { world.resize(); layoutPortal(); updateHud(); });
 
 world.syncPieces(game.pos, false);
 world.applyView(false);

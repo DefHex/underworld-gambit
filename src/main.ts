@@ -132,12 +132,31 @@ ctl.onEnd = (winner) => {
 for (const b of Array.from(document.querySelectorAll('#toolbar button'))) b.addEventListener('click', () => audio.play('ui'));
 // Browsers only allow audio after a gesture.
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
-$('btn-sound').onclick = () => {
-  settings.sound = !settings.sound; settings.music = settings.sound;
-  saveSettings(); audio.syncMusic();
-  $('btn-sound').textContent = settings.sound ? '♪' : '✕';
-};
-$('btn-sound').textContent = settings.sound ? '♪' : '✕';
+// The ♪ button opens a sound menu: music and effects have their own switch and volume.
+const soundMenu = $('sound-menu');
+const smMusic = $<HTMLInputElement>('sm-music'), smSfx = $<HTMLInputElement>('sm-sfx');
+const smMusicVol = $<HTMLInputElement>('sm-music-vol'), smSfxVol = $<HTMLInputElement>('sm-sfx-vol');
+const fill = (el: HTMLInputElement) => el.style.setProperty('--fill', el.value + '%');
+function paintSound(): void {
+  smMusic.checked = settings.music; smSfx.checked = settings.sound;
+  smMusicVol.value = String(Math.round(settings.musicVolume * 100)); smSfxVol.value = String(Math.round(settings.sfxVolume * 100));
+  fill(smMusicVol); fill(smSfxVol);
+  $('row-music').classList.toggle('off', !settings.music);
+  $('row-sfx').classList.toggle('off', !settings.sound);
+  $('btn-sound').textContent = settings.music || settings.sound ? '♪' : '🔇';
+}
+$('btn-sound').onclick = () => { soundMenu.hidden = !soundMenu.hidden; if (!soundMenu.hidden) paintSound(); };
+$('sm-close').onclick = () => { soundMenu.hidden = true; };
+smMusic.onchange = () => { settings.music = smMusic.checked; saveSettings(); audio.syncMusic(); paintSound(); };
+smSfx.onchange = () => { settings.sound = smSfx.checked; saveSettings(); paintSound(); if (settings.sound) audio.play('select'); };
+smMusicVol.oninput = () => { settings.musicVolume = Number(smMusicVol.value) / 100; fill(smMusicVol); saveSettings(); audio.syncMusic(true); };
+smSfxVol.oninput = () => { settings.sfxVolume = Number(smSfxVol.value) / 100; fill(smSfxVol); saveSettings(); };
+smSfxVol.onchange = () => audio.play('select'); // a sample at the new volume
+window.addEventListener('pointerdown', (e) => {
+  const t = e.target as Node;
+  if (!soundMenu.hidden && !soundMenu.contains(t) && !$('btn-sound').contains(t)) soundMenu.hidden = true;
+}, true);
+paintSound();
 const cineBtn = $('btn-cine');
 const paintCine = () => { cineBtn.style.opacity = settings.cinematic ? '1' : '0.45'; };
 cineBtn.onclick = () => { settings.cinematic = !settings.cinematic; saveSettings(); paintCine(); };
@@ -172,6 +191,7 @@ function showPanel(which: 'main' | 'level'): void {
 }
 
 function showMenu(): void {
+  soundMenu.hidden = true;
   tutorial.stop();
   epoch++; thinking = false; ai.reset();
   menu.hidden = false;
@@ -207,7 +227,10 @@ for (const lv of [1, 2, 3, 4] as const) {
 $('m-single').onclick = () => { audio.unlock(); audio.play('ui'); showPanel('level'); };
 $('m-two').onclick = () => startGame(0);
 $('m-back').onclick = () => { audio.play('ui'); showPanel('main'); };
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') showMenu(); });
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!soundMenu.hidden) soundMenu.hidden = true; else showMenu();
+});
 
 // ---------- tutorial ----------
 function startTutorial(): void {

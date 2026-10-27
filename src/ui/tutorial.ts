@@ -19,7 +19,7 @@ const STEPS: Step[] = [
   { t: 'say', title: '↻  Rotate', text: 'Turns the camera a quarter turn so you can see the board from another side.', ring: ['btn-rotate'] },
   { t: 'say', title: '▦  Top view', text: 'Shows <b>both boards at once</b>, side by side (stacked on a phone), so you never have to switch. You can play on either.', ring: ['btn-tactical'] },
   { t: 'say', title: '↶  Undo', text: 'Takes back your last move. Against the computer it rewinds your whole turn.', ring: ['btn-undo'] },
-  { t: 'say', title: '♪  Sound', text: 'Turns the sound effects and music on or off.', ring: ['btn-sound'] },
+  { t: 'say', title: '♪  Sound', text: 'Opens the sound menu: switch the <b>music</b> and the <b>sound effects</b> on or off separately, and set the volume of each.', ring: ['btn-sound'] },
   { t: 'say', title: '🎬  Cinematic', text: 'Every move and capture has its own animation. Switch this off for quick, plain slides.', ring: ['btn-cine'] },
   { t: 'say', title: '≡  Move list', text: 'Every move so far. A <b>↓</b> means a piece fell, an <b>↑</b> means a piece rose, and <b>u:</b> marks a move made in the Underworld.', ring: ['btn-moves'] },
   { t: 'say', title: '⌂  Menu and ＋ New game', text: '⌂ goes back to the main menu. ＋ starts a fresh game. Picking up a piece and tapping a gold target moves it; captures ask you to tap twice to confirm.', ring: ['btn-home', 'btn-new'] },

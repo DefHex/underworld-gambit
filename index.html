@@ -27,6 +27,19 @@
     <button id="btn-moves" title="Move list">≡</button>
     <button id="btn-new" title="New game">＋</button>
   </div>
+  <div id="sound-menu" hidden>
+    <div class="sm-head"><b>Sound</b><button id="sm-close" class="link" title="Close">✕</button></div>
+    <div class="sm-row" id="row-music">
+      <label class="sw" title="Music on/off"><input type="checkbox" id="sm-music" /><span></span></label>
+      <span class="sm-name">Music</span>
+      <input type="range" id="sm-music-vol" min="0" max="100" step="1" aria-label="Music volume" />
+    </div>
+    <div class="sm-row" id="row-sfx">
+      <label class="sw" title="Sound effects on/off"><input type="checkbox" id="sm-sfx" /><span></span></label>
+      <span class="sm-name">Effects</span>
+      <input type="range" id="sm-sfx-vol" min="0" max="100" step="1" aria-label="Sound effects volume" />
+    </div>
+  </div>
   <div id="movelist" hidden></div>
   <div id="promo" hidden></div>
   <div id="banner" hidden></div>

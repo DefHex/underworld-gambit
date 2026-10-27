@@ -47,7 +47,10 @@ export function unlock(): void {
 
 export function play(name: Sfx): void {
   if (!settings.sound || !started) return;
-  sounds.get(name)?.play();
+  const h = sounds.get(name);
+  if (!h) return;
+  h.volume((VOLUME[name] ?? 0.7) * settings.sfxVolume);
+  h.play();
 }
 
 /** Cross-fades the two loops so the music follows the board on screen. */
@@ -56,14 +59,17 @@ export function setRealm(b: 0 | 1): void {
   syncMusic();
 }
 
-export function syncMusic(): void {
+const MUSIC_GAIN = 0.7;
+
+/** Applies the music switch and volume. `instant` skips the fade (used while dragging the slider). */
+export function syncMusic(instant = false): void {
   if (!started) return;
   for (const b of [0, 1] as const) {
     const h = music[b];
     if (!h) continue;
-    const target = settings.music && b === realm ? 0.35 : 0;
+    const target = settings.music && b === realm ? settings.musicVolume * MUSIC_GAIN : 0;
     if (target > 0 && !h.playing()) h.play();
-    h.fade(h.volume(), target, 700);
+    if (instant) h.volume(target); else h.fade(h.volume(), target, 700);
     if (target === 0) setTimeout(() => { if (h.volume() === 0) h.pause(); }, 800);
   }
 }

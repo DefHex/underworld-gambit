@@ -19,6 +19,8 @@ let mode: 0 | 1 | 2 | 3 | 4 = 0;
 let thinking = false;
 let epoch = 0;
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 async function aiTurn(): Promise<void> {
   if (!mode || thinking || ctl.locked || ctl.pos.side !== 1) return;
   if (world.busy) { setTimeout(aiTurn, 120); return; }
@@ -29,7 +31,18 @@ async function aiTurn(): Promise<void> {
   const move = await ai.think(g.save(), mode);
   thinking = false;
   if (mine !== epoch || g !== ctl.game) return;
-  if (move) ctl.play(move);
+  if (move) {
+    // Bring the board the AI is about to move on into view first, so the player sees what happens.
+    if (!world.dual && move.board !== world.active) {
+      thinking = true; // keep input locked during the glide
+      ctl.goTo(move.board);
+      updateHud();
+      await sleep(900);
+      thinking = false;
+      if (mine !== epoch || g !== ctl.game) return;
+    }
+    ctl.play(move);
+  }
   updateHud();
 }
 ctl.blocked = () => thinking || (mode > 0 && ctl.pos.side === 1);

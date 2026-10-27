@@ -22,7 +22,7 @@
     <button id="btn-tactical" title="Tactical view">▦</button>
     <button id="btn-undo" title="Undo">↶</button>
     <button id="btn-sound" title="Sound">♪</button>
-    <button id="btn-ai" title="Opponent: 2P / AI level">2P</button>
+    <button id="btn-home" title="Main menu">⌂</button>
     <button id="btn-cine" title="Cinematic animations on/off">🎬</button>
     <button id="btn-moves" title="Move list">≡</button>
     <button id="btn-new" title="New game">＋</button>
@@ -30,6 +30,19 @@
   <div id="movelist" hidden></div>
   <div id="promo" hidden></div>
   <div id="banner" hidden></div>
+  <div id="menu" class="menu">
+    <div class="menu-panel" id="menu-main">
+      <h1>Underworld <span>Gambit</span></h1>
+      <p class="tag">Two boards. One crown. Nothing stays dead.</p>
+      <button class="big" id="m-single">Single player</button>
+      <button class="big alt" id="m-two">Two players <small>same device</small></button>
+    </div>
+    <div class="menu-panel" id="menu-level" hidden>
+      <h2>Choose your opponent</h2>
+      <div class="levels" id="levels"></div>
+      <button class="link" id="m-back">‹ Back</button>
+    </div>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

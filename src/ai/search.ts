@@ -6,8 +6,10 @@ export interface Limits {
   timeMs: number;
   maxDepth: number;
   maxNodes?: number;
-  /** Centipawns of random noise added to each root move (lowest level only). */
+  /** Centipawns of random noise added to each root move (the weaker levels). */
   noise?: number;
+  /** Chance (0-1) of ignoring the search and playing a random legal move, like a distracted beginner. */
+  blunder?: number;
 }
 
 export interface SearchResult {
@@ -52,6 +54,9 @@ export class Searcher {
 
     const root = pos.legalMoves();
     if (!root.length) return { move: null, score: pos.inCheck() ? -MATE : 0, depth: 0, nodes: 0 };
+    if (limits.blunder && rand() < limits.blunder) {
+      return { move: root[Math.floor(rand() * root.length)], score: 0, depth: 0, nodes: 0 };
+    }
     let best: Move = root[0];
     let bestScore = -INF;
     let done = 0;

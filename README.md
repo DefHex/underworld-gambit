@@ -141,8 +141,8 @@ Isometric (landscape) shows one board plus a corner portal. Portrait phones use 
 | 1 Rules engine and tests | Done |
 | 2 Rendering, isometric camera, touch input, portal | Done |
 | 3 Animations, particles, audio, haptics | Done (audio is **procedural placeholders**; swap in CC0 Kenney/OpenGameArt files of the same name in `public/audio`, `.ogg` is tried first) |
-| 4 AI and difficulty levels | Done (4 levels; the AI shuffles into repetition draws a lot, improve its plan-making) |
-| 5 Tutorial (5 lessons: move, fall, rise, second chance, checkmate), menus, settings screen, credits screen | **Next** |
+| 4 AI and difficulty levels | Done. L1 Apprentice (depth 1, 260 cp noise, 40% random moves) is meant to be easy; L2 depth 2 with noise; L3 depth 6; L4 depth 12 for 3 s. Measured: L1 beat a random mover 7-0-1, L2 beat L1 8-0, L3 beat L2 3-1. The AI shuffles into repetition draws a lot, improve its plan-making |
+| 5 Welcome screen (single player with difficulty picker, or two players on one device) is done. Still to do: tutorial (5 lessons: move, fall, rise, second chance, checkmate), settings screen, credits screen, pause menu | **In progress** |
 | 6 Capacitor Android build: icon, splash, signed release AAB, Play upload instructions; Preferences for settings and the game in progress; lock landscape, back gesture opens pause menu, safe areas | Not started (`@capacitor/core` and `haptics` are installed; no `capacitor.config` or `android/` yet) |
 | 7 Online play with a server running the same `src/rules` package | Later |
 

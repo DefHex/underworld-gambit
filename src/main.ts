@@ -6,6 +6,7 @@ import { AiPlayer } from './ai/client';
 import * as audio from './audio/audio';
 import { buzz } from './platform/haptics';
 import { saveSettings, settings } from './platform/settings';
+import { LEVEL_INFO } from './ai/levels';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('stage');
@@ -136,13 +137,9 @@ $('btn-undo').onclick = () => {
   ctl.undo();
   if (mode && ctl.pos.side === 1) ctl.undo(); // rewind a whole turn against the AI
 };
-$('btn-ai').onclick = () => {
-  mode = ((mode + 1) % 5) as typeof mode;
-  $('btn-ai').textContent = mode ? 'L' + mode : '2P';
-  newGame();
-};
 $('btn-moves').onclick = () => { movelist.hidden = !movelist.hidden; };
 $('btn-new').onclick = () => newGame();
+$('btn-home').onclick = () => showMenu();
 window.addEventListener('resize', () => { world.resize(); layoutPortal(); updateHud(); });
 
 world.syncPieces(game.pos, false);
@@ -151,3 +148,49 @@ ctl.refresh();
 
 // Handles for browser tests.
 (window as unknown as { __uw: unknown }).__uw = { world, ctl, settings, styleDebug, get game() { return ctl.game; } };
+
+// ---------- welcome screen ----------
+const menu = $('menu'), menuMain = $('menu-main'), menuLevel = $('menu-level');
+document.body.classList.add('menu-open');
+
+function showPanel(which: 'main' | 'level'): void {
+  menuMain.hidden = which !== 'main';
+  menuLevel.hidden = which !== 'level';
+}
+
+function showMenu(): void {
+  epoch++; thinking = false; ai.reset();
+  menu.hidden = false;
+  menu.classList.remove('leaving');
+  document.body.classList.add('menu-open');
+  showPanel('main');
+  void menu.offsetWidth;
+}
+
+/** Fades the menu out and pushes the camera in on a fresh game. mode 0 = two players, 1-4 = AI level. */
+function startGame(m: 0 | 1 | 2 | 3 | 4): void {
+  mode = m;
+  if (m) { settings.aiLevel = m; saveSettings(); }
+  audio.unlock();
+  audio.play('ui');
+  ctl.goTo(0);
+  newGame();
+  menu.classList.add('leaving');
+  document.body.classList.remove('menu-open');
+  world.intro();
+  updateHud();
+  setTimeout(() => { if (menu.classList.contains('leaving')) menu.hidden = true; }, 900);
+}
+
+const levelsEl = $('levels');
+for (const lv of [1, 2, 3, 4] as const) {
+  const b = document.createElement('button');
+  b.className = 'level' + (settings.aiLevel === lv ? ' last' : '');
+  b.innerHTML = `<b>${LEVEL_INFO[lv].name}</b><div class="pips">${'●'.repeat(lv)}<i>${'●'.repeat(4 - lv)}</i></div><p>${LEVEL_INFO[lv].blurb}</p>`;
+  b.onclick = () => startGame(lv);
+  levelsEl.appendChild(b);
+}
+$('m-single').onclick = () => { audio.unlock(); audio.play('ui'); showPanel('level'); };
+$('m-two').onclick = () => startGame(0);
+$('m-back').onclick = () => { audio.play('ui'); showPanel('main'); };
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') showMenu(); });

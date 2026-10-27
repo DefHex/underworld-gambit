@@ -377,6 +377,13 @@ export class World {
     this.invalidate();
   }
 
+  /** Camera push-in when a game starts. */
+  intro(): void {
+    this.zoom = 1.45;
+    start(tween(this).to({ zoom: 1 }, 1100).easing(Easing.Cubic.Out));
+    this.invalidate();
+  }
+
   /** Top view shows both boards at once, so nothing needs switching. */
   get dual(): boolean { return this.tactical; }
 

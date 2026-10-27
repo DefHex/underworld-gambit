@@ -23,8 +23,10 @@ export interface MarkerSet {
   threat: { b: BoardId; sq: number }[]; // own pieces under attack
   ghosts: { b: BoardId; sq: number; type: Piece['type']; color: 0 | 1 }[];
   rise?: { b: BoardId; sq: number; check: boolean };
+  /** Tutorial hints: the square to tap next. */
+  hints: { b: BoardId; sq: number }[];
 }
-export const emptyMarkers = (): MarkerSet => ({ quiet: [], capture: [], attack: [], threat: [], ghosts: [] });
+export const emptyMarkers = (): MarkerSet => ({ quiet: [], capture: [], attack: [], threat: [], ghosts: [], hints: [] });
 
 interface ViewState { yaw: number; pitch: number; cy: number }
 
@@ -307,6 +309,10 @@ export class World {
     for (const a of m.attack) at(a.b, a.sq, flat(sq4, 0xff3030, 0.6));
     for (const t of m.threat) at(t.b, t.sq, flat(new THREE.RingGeometry(0.3, 0.46, 4, 1, Math.PI / 4), 0xff2a2a, 0.95));
     if (m.selected) at(m.selected.b, m.selected.sq, flat(sel, 0xffe14a));
+    for (const hnt of m.hints) {
+      at(hnt.b, hnt.sq, flat(new THREE.RingGeometry(0.43, 0.56, 28), 0xffd24a, 1), 0.05);
+      at(hnt.b, hnt.sq, flat(new THREE.CircleGeometry(0.43, 24), 0xffd24a, 0.25), 0.045);
+    }
     if (m.rise) {
       at(m.rise.b, m.rise.sq, flat(new THREE.RingGeometry(0.3, 0.5, 24), m.rise.check ? 0xff4040 : 0x7ad0ff));
     }

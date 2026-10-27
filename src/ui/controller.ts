@@ -23,6 +23,9 @@ export class Controller {
   /** Extra input lock, e.g. while the AI is thinking. */
   blocked: () => boolean = () => false;
   onMoved: () => void = () => {};
+  /** Tutorial: when set, only this move can be made, and it is highlighted. */
+  guide: { b: BoardId; from: number; to: number } | null = null;
+  onWrong: (why: 'piece' | 'target' | 'empty') => void = () => {};
 
   private down: { x: number; y: number; hit: { b: BoardId; sq: number } | null; own: boolean } | null = null;
 
@@ -67,6 +70,7 @@ export class Controller {
       const hit = this.world.pick(e.clientX, e.clientY);
       return this.tap(hit ? hit.sq : null, hit ? hit.b : undefined);
     }
+    if (d.own && d.hit && this.guide && !(d.hit.b === this.guide.b && d.hit.sq === this.guide.from)) { this.onWrong('piece'); return; }
     if (d.own && d.hit) {
       // Drag and drop: pick up, drop on a target (on the same board).
       this.select(d.hit.sq, d.hit.b);
@@ -82,9 +86,23 @@ export class Controller {
 
   tap(sq: number | null, b: BoardId = this.world.active): void {
     if (sq === null) return this.deselect();
+    if (this.guide) return this.guidedTap(sq, b);
     if (this.selected && this.selected.b === b && this.attempt(sq, false)) return;
     if (this.ownPieceAt(sq, b)) this.select(sq, b);
     else this.deselect();
+  }
+
+  /** In the tutorial only the guided move is allowed; anything else just nudges the player. */
+  private guidedTap(sq: number, b: BoardId): void {
+    const g = this.guide!;
+    if (this.selected) {
+      if (b === g.b && sq === g.to && this.attempt(sq, false)) return;
+      if (b === g.b && sq === g.from) return;
+      this.onWrong('target');
+      return;
+    }
+    if (b === g.b && sq === g.from) { this.select(sq, b); return; }
+    this.onWrong(this.ownPieceAt(sq, b) ? 'piece' : 'empty');
   }
 
   switchBoard(): void { this.goTo((1 - this.world.active) as BoardId); }
@@ -102,7 +120,7 @@ export class Controller {
 
   private select(sq: number, b: BoardId = this.world.active): void {
     this.selected = { b, sq };
-    this.targets = this.game.legalMoves().filter((m) => m.board === b && m.from === sq);
+    this.targets = this.game.legalMoves().filter((m) => m.board === b && m.from === sq && (!this.guide || m.to === this.guide.to));
     this.pending = null;
     audio.play('select');
     buzz('select');
@@ -209,6 +227,7 @@ export class Controller {
         mk.threat.push({ b: other, sq });
       }
     });
+    if (this.guide) mk.hints.push({ b: this.guide.b, sq: this.selected ? this.guide.to : this.guide.from });
     w.setMarkers(mk);
     this.hint = preview ? this.describe(preview) : '';
     this.onChange();

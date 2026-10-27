@@ -98,3 +98,28 @@ body.menu-open #toolbar, body.menu-open #turn, body.menu-open #hint, body.menu-o
   .menu .tag + .big { margin-top: 4px; }
   .menu button.big { padding: 10px 14px; margin: 7px auto; } }
 @media (max-height: 330px) { .level p { display: none; } }
+
+/* ---------- tutorial ---------- */
+#tut-ring { position: fixed; z-index: 30; border: 3px solid #ffd24a; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 14px 3px rgba(255,210,74,.8), inset 0 0 12px rgba(255,210,74,.35); animation: ringPulse 1.1s ease-in-out infinite; }
+#tut-ring[hidden] { display: none; }
+@keyframes ringPulse { 50% { transform: scale(1.06); box-shadow: 0 0 22px 7px rgba(255,210,74,.95), inset 0 0 14px rgba(255,210,74,.5); } }
+#coach { position: fixed; z-index: 40; right: calc(var(--sar) + 10px); top: calc(var(--sat) + 38px); width: min(300px, 36vw);
+  padding: 10px 12px 12px; border-radius: 12px; background: rgba(12,7,18,.93); border: 1.5px solid var(--gold);
+  box-shadow: 0 6px 24px rgba(0,0,0,.55); touch-action: manipulation; }
+#coach[hidden] { display: none; }
+#coach .coach-top { display: flex; justify-content: space-between; align-items: center; font-size: 10px; letter-spacing: .1em; color: #a99a78; }
+#coach .link { background: none; border: 0; color: #a99a78; font-size: 10px; cursor: pointer; padding: 2px 0; }
+#coach b#coach-title { display: block; margin: 4px 0 4px; font: 600 15px Cinzel, Georgia, serif; color: var(--gold); letter-spacing: .04em; }
+#coach p { margin: 0; font-size: 12.5px; line-height: 1.42; color: #eadfc6; }
+#coach p b { color: #ffd98a; }
+#coach p b.warn { color: #ff8a6a; }
+#coach-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+#coach-actions button { padding: 7px 14px; border-radius: 9px; font-size: 13px; cursor: pointer; color: var(--gold); background: rgba(40,24,50,.9); border: 1px solid var(--gold); }
+#coach-actions button.primary { color: #1b1208; background: linear-gradient(#f0cf7a, #c8932f); border-color: #ffe7a6; font-weight: 600; }
+body.tutorial #banner { display: none !important; }
+body.menu-open #coach, body.menu-open #tut-ring { display: none; }
+@media (orientation: portrait) {
+  #coach { left: 8px; right: 8px; width: auto; top: calc(var(--sat) + 36px); }
+}
+@media (max-height: 420px) and (orientation: landscape) { #coach { width: min(270px, 38vw); } #coach p { font-size: 12px; } }

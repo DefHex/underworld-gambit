@@ -7,6 +7,8 @@ import * as audio from './audio/audio';
 import { buzz } from './platform/haptics';
 import { saveSettings, settings } from './platform/settings';
 import { LEVEL_INFO } from './ai/levels';
+import { Tutorial } from './ui/tutorial';
+import { tutorialGame } from './tutorial/script';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('stage');
@@ -14,6 +16,7 @@ const world = new World(canvas);
 let game = new Game();
 const ctl = new Controller(world, game, canvas);
 const ai = new AiPlayer();
+let tutorial!: Tutorial;
 
 /** 0 = pass-and-play, 1-4 = play White against the AI at that level. */
 let mode: 0 | 1 | 2 | 3 | 4 = 0;
@@ -46,8 +49,8 @@ async function aiTurn(): Promise<void> {
   }
   updateHud();
 }
-ctl.blocked = () => thinking || (mode > 0 && ctl.pos.side === 1);
-ctl.onMoved = () => { void aiTurn(); };
+ctl.blocked = () => thinking || (mode > 0 && ctl.pos.side === 1) || tutorial.locked;
+ctl.onMoved = () => { if (tutorial.active) void tutorial.moved(); else void aiTurn(); };
 
 function newGame(): void {
   epoch++; thinking = false; ai.reset();
@@ -99,7 +102,7 @@ function updateHud(): void {
   movelist.scrollTop = movelist.scrollHeight;
 }
 
-ctl.onChange = updateHud;
+ctl.onChange = () => { updateHud(); tutorial?.changed(); };
 ctl.onPromotion = (choose) => {
   promo.hidden = false;
   promo.innerHTML = '';
@@ -133,12 +136,12 @@ $('btn-switch').onclick = () => ctl.switchBoard();
 $('btn-rotate').onclick = () => world.rotate();
 $('btn-tactical').onclick = () => { world.toggleTactical(); ctl.deselect(); updateHud(); };
 $('btn-undo').onclick = () => {
-  if (thinking || world.busy) return;
+  if (thinking || world.busy || tutorial.active) return;
   ctl.undo();
   if (mode && ctl.pos.side === 1) ctl.undo(); // rewind a whole turn against the AI
 };
 $('btn-moves').onclick = () => { movelist.hidden = !movelist.hidden; };
-$('btn-new').onclick = () => newGame();
+$('btn-new').onclick = () => { if (!tutorial.active) newGame(); };
 $('btn-home').onclick = () => showMenu();
 window.addEventListener('resize', () => { world.resize(); layoutPortal(); updateHud(); });
 
@@ -159,6 +162,7 @@ function showPanel(which: 'main' | 'level'): void {
 }
 
 function showMenu(): void {
+  tutorial.stop();
   epoch++; thinking = false; ai.reset();
   menu.hidden = false;
   menu.classList.remove('leaving');
@@ -194,3 +198,27 @@ $('m-single').onclick = () => { audio.unlock(); audio.play('ui'); showPanel('lev
 $('m-two').onclick = () => startGame(0);
 $('m-back').onclick = () => { audio.play('ui'); showPanel('main'); };
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') showMenu(); });
+
+// ---------- tutorial ----------
+function startTutorial(): void {
+  mode = 0;
+  epoch++; thinking = false; ai.reset();
+  audio.unlock();
+  audio.play('ui');
+  if (world.dual) world.toggleTactical();
+  ctl.goTo(0);
+  game = tutorialGame();
+  ctl.setGame(game);
+  menu.classList.add('leaving');
+  document.body.classList.remove('menu-open');
+  world.intro();
+  setTimeout(() => { if (menu.classList.contains('leaving')) menu.hidden = true; }, 900);
+  tutorial.start();
+  updateHud();
+}
+tutorial = new Tutorial({
+  world, ctl,
+  restart: () => { tutorial.stop(); startTutorial(); },
+  leave: (to) => { showMenu(); if (to === 'single') showPanel('level'); },
+});
+$('m-tutorial').onclick = startTutorial;

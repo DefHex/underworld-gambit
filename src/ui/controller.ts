@@ -26,6 +26,9 @@ export class Controller {
   /** Tutorial: when set, only this move can be made, and it is highlighted. */
   guide: { b: BoardId; from: number; to: number } | null = null;
   onWrong: (why: 'piece' | 'target' | 'empty') => void = () => {};
+  /** Tutorial: while true, pieces cannot be selected or moved (board switching still works). */
+  movesLocked = false;
+  onLockedTap: () => void = () => {};
 
   private down: { x: number; y: number; hit: { b: BoardId; sq: number } | null; own: boolean } | null = null;
 
@@ -70,6 +73,7 @@ export class Controller {
       const hit = this.world.pick(e.clientX, e.clientY);
       return this.tap(hit ? hit.sq : null, hit ? hit.b : undefined);
     }
+    if (this.movesLocked) { this.onLockedTap(); return; }
     if (d.own && d.hit && this.guide && !(d.hit.b === this.guide.b && d.hit.sq === this.guide.from)) { this.onWrong('piece'); return; }
     if (d.own && d.hit) {
       // Drag and drop: pick up, drop on a target (on the same board).
@@ -85,6 +89,7 @@ export class Controller {
   }
 
   tap(sq: number | null, b: BoardId = this.world.active): void {
+    if (this.movesLocked) { this.onLockedTap(); return; }
     if (sq === null) return this.deselect();
     if (this.guide) return this.guidedTap(sq, b);
     if (this.selected && this.selected.b === b && this.attempt(sq, false)) return;

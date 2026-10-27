@@ -58,6 +58,7 @@ export class Tutorial {
     $('coach-skip').onclick = () => this.d.leave('menu');
     window.addEventListener('resize', () => this.placeRing());
     d.ctl.onWrong = (why) => this.nudge(why);
+    d.ctl.onLockedTap = () => this.pulseCard();
   }
 
   start(): void {
@@ -73,6 +74,7 @@ export class Tutorial {
     this.active = false;
     this.locked = false;
     this.d.ctl.guide = null;
+    this.d.ctl.movesLocked = false;
     document.body.classList.remove('tutorial');
     $('coach').hidden = true;
     $('tut-ring').hidden = true;
@@ -118,6 +120,8 @@ export class Tutorial {
     const s = STEPS[this.i];
     const { ctl, world } = this.d;
     ctl.guide = null;
+    // Pieces only respond during the guided-move steps; the tour and the explanations never touch the demo game.
+    ctl.movesLocked = s.t !== 'move';
     this.ringIds = [];
     if (world.dual) { world.toggleTactical(); }
 
@@ -169,6 +173,14 @@ export class Tutorial {
   changed(): void {
     const s = STEPS[this.i];
     if (this.active && s?.t === 'goto' && this.d.world.active === s.board) this.next();
+  }
+
+  /** A tap on the board when it is not the player's turn to act: draw the eye back to the card. */
+  private pulseCard(): void {
+    const el = $('coach');
+    el.classList.remove('nudge');
+    void el.offsetWidth;
+    el.classList.add('nudge');
   }
 
   private nudge(why: 'piece' | 'target' | 'empty'): void {

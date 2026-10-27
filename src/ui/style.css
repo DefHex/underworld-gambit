@@ -123,3 +123,6 @@ body.menu-open #coach, body.menu-open #tut-ring { display: none; }
   #coach { left: 8px; right: 8px; width: auto; top: calc(var(--sat) + 36px); }
 }
 @media (max-height: 420px) and (orientation: landscape) { #coach { width: min(270px, 38vw); } #coach p { font-size: 12px; } }
+
+#coach.nudge { animation: coachNudge .45s ease; }
+@keyframes coachNudge { 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }

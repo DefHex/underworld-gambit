@@ -9,7 +9,9 @@ import { dualBoardRects, portalRectFor } from './layout';
 import { MarkerSet, fillMarkers } from './markers';
 import { Kit, pickStyle, restoreView } from './exec';
 import { settings } from '../platform/settings';
-import { PieceView, createPieceView, makeGhost, updatePieceView } from './pieces';
+import { PieceView, createPieceView, updatePieceView } from './pieces';
+import { PixelPass } from './pixel-pass';
+import { onSpriteSheetLoaded } from './sprites/sheets';
 
 const FRUSTUM_HEIGHT = 8.2; // world units visible vertically in the main view
 
@@ -48,10 +50,13 @@ export class World {
   private dirty = true;
   private running = false;
   private lastT = 0;
+  private pixels: PixelPass;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.pixels = new PixelPass(this.renderer);
+    onSpriteSheetLoaded(() => this.invalidate());
     this.scene.add(...this.boards);
     this.fx = new Fx(this.scene);
     this.boards[1].position.y = boardY(1);
@@ -399,6 +404,7 @@ export class World {
     const portrait = h > w;
     if (portrait !== this.lastPortrait) { this.lastPortrait = portrait; this.applyView(false); }
     this.portalRect = portalRectFor(w, h);
+    this.pixels.resize(w, h, Math.max(FRUSTUM_HEIGHT, (portrait ? 9.8 : 13) / (w / h)));
     this.invalidate();
   }
 
@@ -438,60 +444,46 @@ export class World {
     requestAnimationFrame(tick);
   }
 
-  private renderDual(w: number, h: number): void {
-    const r = this.renderer;
-    r.setScissorTest(false);
-    r.setViewport(0, 0, w, h);
-    r.setClearColor(0x0b0710, 1);
-    r.clear();
+  private renderDual(): void {
+    this.pixels.clear(0x0b0710);
     const rects = this.dualRects();
     for (const b of [0, 1] as BoardId[]) {
-      const rc = rects[b];
       const cam = this.dualCam(b);
-      const y = h - rc.y - rc.h;
-      r.setScissorTest(true);
-      r.setViewport(rc.x, y, rc.w, rc.h);
-      r.setScissor(rc.x, y, rc.w, rc.h);
       this.boards[0].visible = b === 0;
       this.boards[1].visible = b === 1;
       this.scene.fog = REALM[b].fog;
       this.scene.background = new THREE.Color(REALM[b].bg);
-      r.render(this.scene, cam);
+      this.pixels.render(this.scene, cam, rects[b]);
     }
-    r.setScissorTest(false);
   }
 
-  private render(): void {
-    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
-    if (!w || !h) return;
-    const r = this.renderer;
-    if (this.dual) { this.renderDual(w, h); return; }
+  private renderMainAndPortal(w: number, h: number): void {
     const other = (1 - this.active) as BoardId;
     this.frame(this.mainCam, w / h, this.view, FRUSTUM_HEIGHT * this.zoom);
-
-    r.setScissorTest(false);
-    r.setViewport(0, 0, w, h);
     const mainRealm = this.gliding ? (this.view.cy > -BOARD_GAP / 2 ? 0 : 1) : this.active;
     this.boards[0].visible = this.gliding || this.active === 0;
     this.boards[1].visible = this.gliding || this.active === 1;
     this.scene.fog = this.gliding ? null : REALM[mainRealm].fog;
     this.scene.background = new THREE.Color(REALM[mainRealm].bg);
-    r.render(this.scene, this.mainCam);
+    this.pixels.render(this.scene, this.mainCam);
 
     if (this.portalEnabled) {
       const p = this.portalRect;
       const pv: ViewState = { yaw: this.view.yaw, pitch: this.pitch(), cy: boardY(other) };
       this.frame(this.portalCam, p.w / p.h, pv, FRUSTUM_HEIGHT + 0.6);
-      r.setScissorTest(true);
-      const y = h - p.y - p.h;
-      r.setViewport(p.x, y, p.w, p.h);
-      r.setScissor(p.x, y, p.w, p.h);
       this.boards[0].visible = other === 0;
       this.boards[1].visible = other === 1;
       this.scene.fog = REALM[other].fog;
       this.scene.background = new THREE.Color(REALM[other].bg);
-      r.render(this.scene, this.portalCam);
-      r.setScissorTest(false);
+      this.pixels.render(this.scene, this.portalCam, p);
     }
+  }
+
+  private render(): void {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (!w || !h) return;
+    if (this.dual) this.renderDual();
+    else this.renderMainAndPortal(w, h);
+    this.pixels.present();
   }
 }

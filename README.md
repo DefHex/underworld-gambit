@@ -49,9 +49,11 @@ npx tsc --noEmit     # type check
 npm run build        # tsc + production bundle in dist/
 npm run selfplay     # 200 lowest-level AI-vs-AI games in 8 parallel shards (about 11 min)
 node scripts/gen-audio.mjs   # regenerates the placeholder sounds in public/audio
+npm run sprites      # rebuilds public/sprites from the sheets in art/sprites
+npm run check-sprites
 ```
 
-Dev tools: `/models.html?yaw=30` shows a model sheet of all twelve pieces (`&under=1` for the Underworld look).
+Dev tools: `/models.html?yaw=30` shows a model sheet of all twelve pieces (`&under=1` for the Underworld look, `&sprites=1` for the pixel-art sprites of every type).
 
 ## Docker / VPS
 
@@ -82,27 +84,32 @@ src/rules      Pure TypeScript, no DOM. The source of truth.
 src/ai         Negamax alpha-beta, iterative deepening, quiescence, Zobrist TT over both boards and marks
   search.ts eval.ts zobrist.ts levels.ts  worker.ts (Web Worker)  client.ts (main-thread wrapper)
 src/render     Three.js
-  world.ts       Scene, isometric camera, portal inset, picking, markers, playMove() sequencer
-  pieces.ts      Low-poly vertex-colored piece models + modelling helpers
+  world.ts       Scene, isometric camera, portal inset, picking, playMove() sequencer
+  pixel-pass.ts  Renders the scene into a low-res target and scales it up with hard edges (the pixel look)
+  pieces.ts      Piece views: pixel sprites for the types in SPRITE_PIECES, low-poly models for the rest
+  sprites/       sheets.ts (loads public/sprites, team palettes), sprite-body.ts (camera-facing 8-angle sprite + palette shader)
+  board-scene.ts Tiles, frame, ground and lights of one board
+  coords.ts      Square ↔ world coordinates;  layout.ts  top-view and portal screen rectangles;  markers.ts  move markers
   terrain.ts     Biome tiles and 3D terrain features for both boards (OVER_MAP / HELL_MAP)
   decor.ts       Frames and floors
   fx.ts          three.quarks particles, cracks, light columns, flashes
   models.ts      glTF loader for the KayKit props (skulls, ribs on the bone fields)
   tween.ts       Our own tween Group on a virtual clock (see gotchas)
   exec/          The cinematic animation system (see below)
-src/ui         controller.ts (taps, drags, swipes, previews, AI hookup)  style.css
+src/ui         controller.ts (taps, drags, swipes, previews, AI hookup), hud.ts, sound-menu.ts, tutorial.ts, style.css
 src/audio      howler.js wrapper (SFX + music cross-fade between boards)
 src/platform   settings.ts (localStorage), haptics.ts (Capacitor or navigator.vibrate)
-src/main.ts    Wiring, HUD, toolbar. Exposes window.__uw for debugging.
-tests/         rules.test.ts perft.test.ts ai.test.ts invariants.test.ts, selfplay/ (excluded by default)
-scripts/       gen-audio.mjs, selfplay.ts, run-selfplay.mjs
+src/main.ts    Wiring, AI turns, toolbar, menus. Exposes window.__uw for debugging.
+tests/         rules, perft, ai, invariants, tutorial, sprites (sheet validation); selfplay/ (excluded by default)
+scripts/       gen-audio.mjs, selfplay.ts, run-selfplay.mjs, sprites/ (sheet builder), check-sprites.mjs
+art/sprites/   CC0 source sprite sheets the builder slices (see Pixel-art sprites)
 ```
 
 ### Move pipeline
 `Controller.play()` → `Game.play()` (rules, returns `MoveInfo` with `fell` / `rose` / `destroyed`) → `World.playMove(move, info, pos)`. `playMove` picks a style, runs it, then plays the victim's fate (crack and pop in below, destruction, or the attacker's rise with a column of light) and finally reconciles the scene with the position via `syncPieces`. `world.pending > 0` while it runs; the controller ignores input and the AI waits.
 
 ### Cinematic animations (`src/render/exec`)
-- `kit.ts` — `Kit`: the toolbox each style gets (`tw`, `wait`, `glide`, `proj`, `every`, `burst`, `ring`, `flash`, `hit(reaction)`) plus the eight victim **reactions** (squash, launch, topple, explode, burn, zap, hoist, spin).
+- `kit.ts` — `Kit`: the toolbox each style gets (`tw`, `wait`, `glide`, `proj`, `every`, `burst`, `ring`, `flash`, `hit(reaction)`) plus the victim **reactions** (squash, launch, topple, explode, burn, zap, hoist, spin, and `die`, which plays a sprite victim's death frames). For sprite pieces: `walk(ms, u0, u1)` moves with the walk cycle, `anim(tag, { onContact })` plays an animation on the virtual clock and fires `onContact` on its contact step, `pose(tag, step)` holds a frame, `victimSprite` tells whether the victim is a sprite.
 - `props.ts` — rocket, parachute, tank, lance, sword, whip, bolt, hammer, throne, etc.
 - `bishop.ts rook.ts knight.ts queen.ts king.ts pawn.ts` — each exports `{ moves: Style[2], kills: Style[10] }`. A `Style` is `{ name, run(k): Promise<void>, zoom? }`; styles are async functions that await steps and must call `k.hit(...)` exactly when contact happens (it plays the sound, shake and the victim's reaction).
 - `index.ts` — `pickStyle()` picks randomly, never the same one twice in a row. The 🎬 button (`settings.cinematic`) switches to plain slides.
@@ -110,6 +117,24 @@ scripts/       gen-audio.mjs, selfplay.ts, run-selfplay.mjs
 
 ### Views
 Isometric (landscape) shows one board plus a corner portal. Portrait phones use a square-on camera fitted by width. **Top view** (the ▦ button) is a dual view: both boards on screen at once, side by side on wide screens and stacked on tall ones, both playable (`World.dual`, `dualRects()`, `pick()` returns the board and square under a tap). Each top-view camera is clipped to its own slab so the other board's particles never show through.
+
+### Pixel-art sprites (in progress)
+The pieces are moving from low-poly models to Doom-style pixel sprites. Sources are CC0 sheets by Nmn from OpenGameArt (see `CREDITS.md`), kept unmodified in `art/sprites/`:
+
+| Piece | Sprite | Sheet |
+|---|---|---|
+| Pawn | Stability Officer (pistol soldier) | officer.png |
+| Knight | Hindring (four-legged beast) | hindring.png |
+| Bishop | Bug (floating clawed head) | bug.png |
+| Rook | Harkubus (brute with arm cannons) | harkubus.png |
+| Queen | Bmonkey (scythe-armed mutant) | bmonkey.png |
+| King | Mutant Leader (armored warlord) | leader.png |
+
+- **Pipeline**: `npm run sprites` slices each sheet (one row per frame, one column per Doom rotation, cyan background) into `public/sprites/<piece>.png` (palette indices: 0 transparent, 1 outline) and `<piece>.json` (frames with foot anchors, tags `idle move atk_a [atk_b] hurt death` with 8 views per step, `contact` step per attack, scale). The row layout of every sheet lives in `PIECES` in `scripts/sprites/build-sprites.mjs`. `npm run check-sprites` (also part of `npm test`) validates the output. `--preview` writes uncolored atlases to `art/sprites/preview/` (git-ignored).
+- **Views**: like Doom, each sprite picks one of 8 angles from the camera and the piece's facing (`SpriteBody.rotationFor`); 5-angle rows are mirrored for the other three. The body is a camera-facing quad sized in the shader; a 3D lean or tumble of the piece group turns into a screen-space roll.
+- **Colors**: `sheets.ts` maps each sprite's shading onto a team ramp (cream and gold for White, purple and silver for Black, ember and violet glow on the Underworld) and keeps bright yellow glows (muzzle flashes, eyes) as drawn. Tune `LOOKS` there; no rebuild needed.
+- **Pixel look**: `PixelPass` renders at about 72 low-res pixels per square (a whole-number fraction of the screen) and scales up with nearest filtering, so board, particles and sprites share one pixel grid.
+- **Status**: step 1 of 4 done: pawns are sprites in the game (march, double time, and three pistol kills; sprite victims die with their own death frames). The other five pieces are built and can be previewed at `/models.html?sprites=1` (add `&yaw=90`, `&under=1`, `&tag=atk_a&step=1`); switch one on by adding it to `SPRITE_PIECES` in `pieces.ts` and giving it sprite styles in its `exec/` file.
 
 ### Terrain
 `terrain.ts` has two 8×8 character maps. Overworld: `g` grass, `f` forest, `m` mountain, `h` hills, `r` river. Underworld: `a` ash, `l` lava, `m` obsidian ridge, `f` dead forest, `b` bone field. Light/dark squares get a contrast overlay so the checker stays readable. Features are small and at tile corners; every tile top is at y = 0 so animations can assume one ground height.
@@ -152,4 +177,4 @@ Also pending: the checkmate banner shows immediately instead of after the slow-m
 60 fps on mid-range phones, download under 50 MB (currently about 3 MB), pixel ratio capped at 2, render only while something moves, no real-time shadows (blob shadows), bloom only on high-end devices (not implemented yet).
 
 ## Credits
-See `CREDITS.md`. All art is generated in code except the CC0 KayKit props in `public/models`.
+See `CREDITS.md`. All art is generated in code except the CC0 KayKit props in `public/models` and the CC0 Nmn sprite sheets in `art/sprites` (built into `public/sprites`).

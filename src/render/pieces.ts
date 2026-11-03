@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BoardId, Piece, PieceType } from '../rules';
+import { spriteSheet } from './sprites/sheets';
+import { SpriteBody, isSpriteBody } from './sprites/sprite-body';
+
+/** Piece types drawn as pixel-art sprites; the rest still use the low-poly models below. */
+export const SPRITE_PIECES: ReadonlySet<PieceType> = new Set<PieceType>(['p']);
 
 type G = THREE.BufferGeometry;
 
@@ -216,14 +221,30 @@ export interface PieceView extends THREE.Group {
   userData: { type: PieceType; color: 0 | 1; body: THREE.Mesh; outline: THREE.Mesh; ring: THREE.Mesh; blob: THREE.Mesh };
 }
 
+const noGeometry = new THREE.BufferGeometry();
+/** Everything faces the opponent: white looks toward -z, black toward +z. */
+const facingYaw = (color: 0 | 1) => (color === 0 ? Math.PI : 0);
+
+/** Puts the right body (sprite or 3D model) for a piece type into the view, replacing the old one. */
+function setBody(view: PieceView, type: PieceType, color: 0 | 1): void {
+  const u = view.userData;
+  if (u.body) view.remove(u.body);
+  if (SPRITE_PIECES.has(type)) {
+    u.body = new SpriteBody(spriteSheet(type));
+    u.outline.geometry = noGeometry; // sprites carry their own outline
+  } else {
+    u.body = new THREE.Mesh(pieceGeometry(type, color), new THREE.MeshToonMaterial({ gradientMap: gradient, vertexColors: true }));
+    u.outline.geometry = u.body.geometry;
+  }
+  u.type = type;
+  u.color = color;
+  view.add(u.body);
+}
+
 export function createPieceView(piece: Piece, board: BoardId): PieceView {
   const group = new THREE.Group() as PieceView;
-  const body = new THREE.Mesh(
-    pieceGeometry(piece.type, piece.color),
-    new THREE.MeshToonMaterial({ gradientMap: gradient, vertexColors: true }),
-  );
   const outline = new THREE.Mesh(
-    body.geometry,
+    noGeometry,
     new THREE.MeshBasicMaterial({
       color: OUTLINE[piece.color], transparent: true, opacity: 0.14,
       depthFunc: THREE.GreaterDepth, depthWrite: false,
@@ -235,8 +256,9 @@ export function createPieceView(piece: Piece, board: BoardId): PieceView {
   ring.position.y = 0.05;
   const blob = new THREE.Mesh(blobGeo, blobMat);
   blob.position.y = 0.012;
-  group.add(blob, body, outline, ring);
-  group.userData = { type: piece.type, color: piece.color, body, outline, ring, blob };
+  group.add(blob, outline, ring);
+  group.userData = { type: piece.type, color: piece.color, body: undefined as unknown as THREE.Mesh, outline, ring, blob };
+  setBody(group, piece.type, piece.color);
   updatePieceView(group, piece, board);
   return group;
 }
@@ -244,30 +266,38 @@ export function createPieceView(piece: Piece, board: BoardId): PieceView {
 /** Brings a view in line with the piece (type after promotion, realm look, risen ring). */
 export function updatePieceView(view: PieceView, piece: Piece, board: BoardId): void {
   const u = view.userData;
-  if (u.type !== piece.type || u.color !== piece.color) {
-    u.type = piece.type; u.color = piece.color;
-    u.body.geometry = pieceGeometry(piece.type, piece.color);
-    u.outline.geometry = u.body.geometry;
+  if (u.type !== piece.type || u.color !== piece.color) setBody(view, piece.type, piece.color);
+  if (isSpriteBody(u.body)) {
+    u.body.setLook(piece.color, board);
+    u.body.pose('idle');
+  } else {
+    const look = LOOK[board][piece.color];
+    const m = u.body.material as THREE.MeshToonMaterial;
+    m.color.setHex(look.tint);
+    m.emissive.setHex(look.emissive);
+    m.emissiveIntensity = look.intensity;
   }
-  const look = LOOK[board][piece.color];
-  const m = u.body.material as THREE.MeshToonMaterial;
-  m.color.setHex(look.tint);
-  m.emissive.setHex(look.emissive);
-  m.emissiveIntensity = look.intensity;
   u.ring.visible = piece.risen;
-  // Everything faces the opponent: white looks toward -z, black toward +z.
-  u.body.rotation.y = u.outline.rotation.y = piece.color === 0 ? Math.PI : 0;
+  u.body.rotation.y = u.outline.rotation.y = facingYaw(piece.color);
 }
 
 export function makeGhost(piece: { type: PieceType; color: 0 | 1 }, board: BoardId): THREE.Group {
   const g = new THREE.Group();
+  if (SPRITE_PIECES.has(piece.type)) {
+    const ghost = new SpriteBody(spriteSheet(piece.type), { ghost: true });
+    ghost.setLook(piece.color, board);
+    ghost.pose('idle');
+    ghost.rotation.y = facingYaw(piece.color);
+    g.add(ghost);
+    return g;
+  }
   const mat = new THREE.MeshBasicMaterial({
     color: LOOK[board][piece.color].tint === 0xffffff ? PAL[piece.color].base : LOOK[board][piece.color].tint,
     transparent: true, opacity: 0.45, depthTest: false,
   });
   const mesh = new THREE.Mesh(pieceGeometry(piece.type, piece.color), mat);
   mesh.renderOrder = 20;
-  mesh.rotation.y = piece.color === 0 ? Math.PI : 0;
+  mesh.rotation.y = facingYaw(piece.color);
   g.add(mesh);
   return g;
 }

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { play, Sfx } from '../../audio/audio';
 import type { Palette } from '../fx';
 import { PAL, PieceView } from '../pieces';
+import type { SpriteTag } from '../sprites/sheets';
+import { SpriteBody, isSpriteBody } from '../sprites/sprite-body';
 import { Easing, start, tween } from '../tween';
 import type { World } from '../world';
 import { debris, glow } from './props';
@@ -10,7 +12,19 @@ type V3 = THREE.Vector3;
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
-export type Reaction = 'squash' | 'launch' | 'topple' | 'explode' | 'burn' | 'zap' | 'hoist' | 'spin';
+/** Squares covered by one full walk cycle. */
+const WALK_STRIDE = 0.55;
+
+export type Reaction = 'squash' | 'launch' | 'topple' | 'explode' | 'burn' | 'zap' | 'hoist' | 'spin' | 'die';
+export interface AnimOptions {
+  /** Whose sprite to animate (default: the attacker). */
+  view?: PieceView;
+  /** Duration; defaults to the animation's steps at `fps`. */
+  ms?: number;
+  fps?: number;
+  /** Called once, on the animation's contact step (when an attack lands). */
+  onContact?: () => void;
+}
 export interface ReactOpts { dir?: V3; power?: number }
 export interface Style { name: string; run: (k: Kit) => Promise<void>; zoom?: number }
 type Ease = (k: number) => number;
@@ -87,6 +101,43 @@ export class Kit {
     void this.tw(ms, () => { if (++n % frames === 0) fn(); }, Easing.Linear.None);
   }
 
+  // ---------- pixel sprites ----------
+
+  /** The attacker's sprite, when it is drawn as one. */
+  get sprite(): SpriteBody | undefined { return spriteOf(this.a); }
+  /** The victim's sprite, when there is a victim drawn as one. */
+  get victimSprite(): SpriteBody | undefined { return this.v ? spriteOf(this.v) : undefined; }
+
+  /** Holds one step of a sprite animation (no-op for 3D pieces). */
+  pose(tag: SpriteTag, step = 0, view: PieceView = this.a): void { spriteOf(view)?.pose(tag, step); }
+
+  /**
+   * Plays a sprite animation through once, on the virtual clock (so slow motion slows it too).
+   * 3D pieces just wait the same time, so a style can mix both.
+   */
+  anim(tag: SpriteTag, options: AnimOptions = {}): Promise<void> {
+    const body = spriteOf(options.view ?? this.a);
+    const steps = Math.max(1, body?.steps(tag) ?? 1);
+    const contact = body?.contact(tag) ?? 0;
+    let contacted = false;
+    return this.tw(options.ms ?? (steps / (options.fps ?? 8)) * 1000, (u) => {
+      const step = Math.min(steps - 1, Math.floor(u * steps));
+      body?.pose(tag, step);
+      if (!contacted && step >= contact) { contacted = true; options.onContact?.(); }
+    }, Easing.Linear.None);
+  }
+
+  /** Walks the attacker along the from→to line between fractions u0 and u1, cycling its walk frames. */
+  walk(ms: number, u0: number, u1: number, ease: Ease = Easing.Linear.None): Promise<void> {
+    this.face();
+    const steps = Math.max(1, this.sprite?.steps('move') ?? 1);
+    const cycles = Math.max(1, Math.round((Math.abs(u1 - u0) * this.dist) / WALK_STRIDE));
+    return this.tw(ms, (t) => {
+      this.a.position.copy(this.at(u0 + (u1 - u0) * t));
+      this.pose('move', Math.floor(t * cycles * steps) % steps);
+    }, ease);
+  }
+
   // ---------- effects ----------
 
   /** Plays a sound effect (respects the sound setting). */
@@ -122,7 +173,10 @@ export class Kit {
     this.onImpact();
     play(REACTION_SOUND[r]);
     this.shake(shake);
-    if (this.v) this.reaction = REACTIONS[r](this, this.v, { dir: this.dir, power: 1, ...o });
+    if (this.v) {
+      this.pose('hurt', 0, this.v);
+      this.reaction = REACTIONS[r](this, this.v, { dir: this.dir, power: 1, ...o });
+    }
     return this.reaction;
   }
 
@@ -131,6 +185,7 @@ export class Kit {
     for (const p of this.props) p.parent?.remove(p);
     this.a.remove(this.rig);
     this.bodyVisible(true);
+    this.pose('idle');
     this.a.rotation.set(0, 0, 0);
     this.a.scale.setScalar(1);
     this.a.position.set(this.to.x, 0, this.to.z);
@@ -143,7 +198,10 @@ export function restoreView(v: PieceView): void {
   v.position.y = 0;
   v.children.forEach((c) => { c.visible = true; });
   v.userData.body.visible = true;
+  spriteOf(v)?.pose('idle');
 }
+
+const spriteOf = (view: PieceView): SpriteBody | undefined => (isSpriteBody(view.userData.body) ? view.userData.body : undefined);
 
 function spawnDebris(k: Kit, v: PieceView, n: number) {
   const pal = PAL[v.userData.color];
@@ -160,6 +218,7 @@ function spawnDebris(k: Kit, v: PieceView, n: number) {
 
 const REACTION_SOUND: Record<Reaction, Sfx> = {
   squash: 'stomp', launch: 'smack', topple: 'thud', explode: 'explosion', burn: 'fire', zap: 'zap', hoist: 'whip', spin: 'whoosh',
+  die: 'thud',
 };
 
 const REACTIONS: Record<Reaction, (k: Kit, v: PieceView, o: Required<ReactOpts>) => Promise<void>> = {
@@ -256,5 +315,13 @@ const REACTIONS: Record<Reaction, (k: Kit, v: PieceView, o: Required<ReactOpts>)
       v.position.y = 0.8 * Math.sin(u * Math.PI);
       v.scale.setScalar(Math.max(0.01, 1 - u * u));
     }, Easing.Quadratic.In);
+  },
+  /** Sprite victims play their own death frames; 3D pieces topple instead. */
+  async die(k, v, o) {
+    if (!spriteOf(v)?.steps('death')) return REACTIONS.topple(k, v, o);
+    k.burst(v.position.clone().setY(0.4), 'smoke', 10, { spread: Math.PI / 2.4 });
+    await k.anim('death', { view: v, fps: 11 });
+    await k.wait(420);
+    await k.tw(220, (u) => v.scale.setScalar(Math.max(0.01, 1 - u)), Easing.Cubic.In);
   },
 };

@@ -67,13 +67,22 @@ export class Rig {
     return joint;
   }
 
-  /** Hangs vertex-colored parts on a joint as one toon-shaded mesh. */
-  attach(name: string, parts: THREE.BufferGeometry[]): void {
-    if (parts.length) this.get(name).add(new THREE.Mesh(merge(parts), TOON));
+  /**
+   * Hangs vertex-colored parts on a joint as one toon-shaded mesh. `team` parts (robes, the horse,
+   * the tower's stone) are recolored white or black in the game; everything else keeps its colors.
+   */
+  attach(name: string, parts: THREE.BufferGeometry[], { team = false } = {}): void {
+    if (!parts.length) return;
+    const mesh = new THREE.Mesh(merge(parts), TOON);
+    mesh.userData.team = team;
+    this.get(name).add(mesh);
   }
 
   /** Hangs any object (textured or glowing meshes) on a joint. */
-  attachObject(name: string, object: THREE.Object3D): void { this.get(name).add(object); }
+  attachObject(name: string, object: THREE.Object3D, { team = false } = {}): void {
+    object.traverse((child) => { child.userData.team = team; });
+    this.get(name).add(object);
+  }
 
   /** Rotates a joint's rest orientation (for limbs that hang at an angle when relaxed). */
   setRest(name: string, rx = 0, ry = 0, rz = 0): void { this.get(name).rotation.set(rx * DEG, ry * DEG, rz * DEG); }

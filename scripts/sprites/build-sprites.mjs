@@ -4,11 +4,13 @@
 //
 // A sheet is a grid of 64px cells on cyan: one row per animation frame, one cell per Doom viewing
 // angle (1-8: front, front-left, left, back-left, back, back-right, right, front-right). Rows of
-// single-angle frames (deaths) hold several frames side by side. The sidecar <piece>.json says which
-// rows are which, the tags, the contact steps and the colors that keep their color on every team.
+// single-angle frames (deaths) hold several frames side by side. <piece>.team.png marks the
+// team-colored parts in white. The sidecar <piece>.json says which rows are which, the tags, the
+// contact steps and the glow colors.
 //
 // Output image: one byte per pixel, the index into the piece's palette (0 = transparent,
-// 1 = outline). The game recolors it per team with a palette texture.
+// 1 = outline). Team-colored pixels get palette entries of their own, which the game turns white
+// or black; every other color is shown as drawn.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +27,13 @@ const VIEWS = 8;
 export const sheetNames = () => fs.readdirSync(SOURCE_DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();
 
 const isCyan = (rgba, i) => rgba[i * 4] === 0 && rgba[i * 4 + 1] === 255 && rgba[i * 4 + 2] === 255;
-const rgbKey = (rgba, i) => (rgba[i * 4] << 16) | (rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
-const channels = (key) => [key >> 16, (key >> 8) & 255, key & 255];
-const distance = (a, b) => Math.hypot(...channels(a).map((v, i) => v - channels(b)[i]));
+// A color key packs the 24-bit color and a team flag in the lowest bit.
+const colorKey = (image, mask, i) => ((image.rgba[i * 4] << 16) | (image.rgba[i * 4 + 1] << 8) | image.rgba[i * 4 + 2]) * 2 + (mask.rgba[i * 4] > 127 ? 1 : 0);
+const rgbOf = (key) => key >>> 1;
+const isTeam = (key) => (key & 1) === 1;
+const channels = (key) => [rgbOf(key) >> 16, (rgbOf(key) >> 8) & 255, rgbOf(key) & 255];
+/** Color distance; team and plain colors never mix. */
+const distance = (a, b) => (isTeam(a) === isTeam(b) ? Math.hypot(...channels(a).map((v, i) => v - channels(b)[i])) : Infinity);
 
 // ---------- cutting the sheet ----------
 
@@ -59,20 +65,20 @@ function addOutline(pixels, w, h) {
 }
 
 /** Cuts one frame out (padded by 1px for the outline), as raw colors for now. Its anchor is the cell's foot point. */
-function cutFrame(image, bounds, cellX, cellY, anchor) {
+function cutFrame(image, mask, bounds, cellX, cellY, anchor) {
   const w = bounds.w + 2, h = bounds.h + 2;
   const colors = new Int32Array(w * h).fill(-1);
   for (let y = 0; y < bounds.h; y++) {
     for (let x = 0; x < bounds.w; x++) {
       const i = (bounds.y + y) * image.width + bounds.x + x;
-      if (!isCyan(image.rgba, i)) colors[(y + 1) * w + x + 1] = rgbKey(image.rgba, i);
+      if (!isCyan(image.rgba, i)) colors[(y + 1) * w + x + 1] = colorKey(image, mask, i);
     }
   }
   return { w, h, colors, ax: cellX + anchor.x - bounds.x + 1, ay: cellY + anchor.y - bounds.y + 1 };
 }
 
 /** Frames of every row: angled rows give [frameId, 0] per view, single-angle rows a list of frame ids. */
-function cutSheet(name, image, meta) {
+function cutSheet(name, image, mask, meta) {
   const frames = [];
   const rows = meta.rows.map((views, r) => {
     const ids = [];
@@ -83,7 +89,7 @@ function cutSheet(name, image, meta) {
         if (views === VIEWS) throw new Error(`${name}: row ${r + 1}, view ${column + 1} is empty`);
         break;
       }
-      frames.push(cutFrame(image, bounds, cellX, cellY, meta.anchor));
+      frames.push(cutFrame(image, mask, bounds, cellX, cellY, meta.anchor));
       ids.push(frames.length - 1);
     }
     return views === VIEWS ? ids.map((id) => [id, 0]) : ids;
@@ -107,12 +113,12 @@ function buildPalette(frames) {
   return { palette, indexOf };
 }
 
-/** 5th, 50th and 95th percentile of pixel luminance, so the game can map each piece's shading onto the same range. */
+/** 5th, 50th and 95th percentile of the team pixels' luminance, so the game can map their shading onto the team ramp. */
 function luminanceRange(frames) {
   const values = [];
   for (const f of frames) {
     for (const key of f.colors) {
-      if (key < 0) continue;
+      if (key < 0 || !isTeam(key)) continue;
       const [r, g, b] = channels(key);
       values.push((0.2126 * r + 0.7152 * g + 0.0722 * b) / 255);
     }
@@ -147,7 +153,8 @@ function packAtlas(frames) {
 function buildPiece(name) {
   const meta = JSON.parse(fs.readFileSync(path.join(SOURCE_DIR, `${name}.json`), 'utf8'));
   const image = readPng(fs.readFileSync(path.join(SOURCE_DIR, `${name}.png`)));
-  const { frames, rows } = cutSheet(name, image, meta);
+  const mask = readPng(fs.readFileSync(path.join(SOURCE_DIR, `${name}.team.png`)));
+  const { frames, rows } = cutSheet(name, image, mask, meta);
   const { palette, indexOf } = buildPalette(frames);
   for (const f of frames) {
     const pixels = Uint8Array.from(f.colors, (key) => (key < 0 ? TRANSPARENT : indexOf.get(key)));
@@ -163,7 +170,7 @@ function buildPiece(name) {
   }
   const front = frames[tags.idle.steps[0][0][0]];
   const keep = meta.keep.map((hex) => {
-    const key = Number.parseInt(hex.slice(1), 16);
+    const key = Number.parseInt(hex.slice(1), 16) * 2;
     const match = palette.find((color) => distance(color, key) <= 6);
     if (match === undefined) throw new Error(`${name}: keep color ${hex} does not appear in the sheet`);
     return indexOf.get(match);
@@ -175,7 +182,8 @@ function buildPiece(name) {
     image: `${name}.png`,
     size: { w: ATLAS_WIDTH, h: atlas.height },
     unitsPerTexel: Number((meta.height / (front.h - 2)).toFixed(6)),
-    palette: ['#000000', '#000000', ...palette.map((key) => '#' + key.toString(16).padStart(6, '0'))],
+    palette: ['#000000', '#000000', ...palette.map((key) => '#' + rgbOf(key).toString(16).padStart(6, '0'))],
+    team: palette.flatMap((key, i) => (isTeam(key) ? [i + FIRST_COLOR] : [])),
     luminance: luminanceRange(frames),
     keep,
     frames: frames.map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h, ax: f.ax, ay: f.ay })),

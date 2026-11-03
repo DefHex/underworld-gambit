@@ -1,5 +1,5 @@
 // Validates the built sprite sheets in public/sprites: one per piece, image size, palette limit,
-// frame bounds, tag names, all 8 views per step, contact steps and team-proof colors.
+// frame bounds, tag names, all 8 views per step, contact steps, and team-colored parts.
 // Also runs as part of `npm test`.
 //
 //   node scripts/check-sprites.mjs
@@ -38,7 +38,10 @@ function checkTags(sheet, report) {
 function checkPixels(sheet, image, report) {
   if (image.width !== sheet.size.w || image.height !== sheet.size.h) report(`image is ${image.width}x${image.height}, data says ${sheet.size.w}x${sheet.size.h}`);
   if (sheet.palette.length > 256) report(`palette has ${sheet.palette.length} colors, max 256`);
-  for (const index of sheet.keep) if (index < 2 || index >= sheet.palette.length) report(`keep color ${index} is not in the palette`);
+  for (const [list, indices] of [['keep', sheet.keep], ['team', sheet.team]]) {
+    for (const index of indices) if (index < 2 || index >= sheet.palette.length) report(`${list} color ${index} is not in the palette`);
+  }
+  if (!sheet.team.length) report('no team-colored pixels: the two sides would look the same');
   for (let i = 0; i < image.width * image.height; i++) {
     const opaque = image.rgba[i * 4 + 3] > 0, index = image.rgba[i * 4];
     if (opaque && index >= sheet.palette.length) { report(`a pixel uses palette index ${index}, beyond the palette`); return; }
@@ -51,7 +54,9 @@ export function checkSprites() {
   for (const name of PIECES) {
     const report = (message) => problems.push(`${name}: ${message}`);
     const file = (dir, ext) => path.join(ROOT, dir, `${name}.${ext}`);
-    if (!fs.existsSync(file('art/sprites', 'png'))) report(`baked sheet art/sprites/${name}.png is missing (npm run bake)`);
+    for (const ext of ['png', 'team.png', 'json']) {
+      if (!fs.existsSync(file('art/sprites', ext))) report(`baked art/sprites/${name}.${ext} is missing (npm run bake)`);
+    }
     if (!fs.existsSync(file('public/sprites', 'json')) || !fs.existsSync(file('public/sprites', 'png'))) {
       report('built sheet missing (npm run sprites)');
       continue;

@@ -13,7 +13,7 @@ const FACE_Y = 0.22;
 
 function build(): Rig {
   const rig = new Rig();
-  humanoid(rig, null, { skin: SKIN, shirt: UNIFORM, pants: TROUSERS, boots: LEATHER });
+  humanoid(rig, null, { skin: SKIN, shirt: UNIFORM, pants: TROUSERS, boots: LEATHER, team: ['shirt', 'sleeves', 'pants'] });
   rig.attach('hips', [
     box(0.42, 0.07, 0.27, LEATHER, { y: 0.08 }),
     box(0.06, 0.05, 0.03, BRASS, { y: 0.08, z: 0.14 }),
@@ -24,7 +24,7 @@ function build(): Rig {
   rig.attach('head', [
     part(new THREE.SphereGeometry(0.235, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), HELMET, { y: FACE_Y + 0.02 }),
     cyl(0.27, 0.27, 0.035, HELMET, { y: FACE_Y + 0.02 }, 12),
-  ]);
+  ], { team: true });
   // Rifle along +z, carried by the torso so poses only need to aim it.
   rig.joint('rifle', 'spine', 0, 0.28, 0.17);
   rig.attach('rifle', [

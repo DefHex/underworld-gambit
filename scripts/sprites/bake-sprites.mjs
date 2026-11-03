@@ -1,4 +1,5 @@
-// Bakes the piece characters (src/bake) into sprite sheets: art/sprites/<piece>.png + <piece>.json.
+// Bakes the piece characters (src/bake) into sprite sheets: art/sprites/<piece>.png, the team-color
+// mask <piece>.team.png, and <piece>.json.
 // Starts a Vite dev server, opens /bake.html in headless Chrome or Edge, and saves what it renders.
 //
 //   npm run bake          (then `npm run sprites` builds them for the game)
@@ -70,8 +71,10 @@ try {
   for (let attempt = 0; attempt < 100 && !(await page.evaluate('typeof window.bakeAll === "function"')); attempt++) await sleep(200);
   const sheets = await page.evaluate('window.bakeAll()');
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  for (const [name, { png, meta }] of Object.entries(sheets)) {
-    fs.writeFileSync(path.join(OUT_DIR, `${name}.png`), Buffer.from(png.split(',')[1], 'base64'));
+  const save = (file, dataUrl) => fs.writeFileSync(path.join(OUT_DIR, file), Buffer.from(dataUrl.split(',')[1], 'base64'));
+  for (const [name, { png, team, meta }] of Object.entries(sheets)) {
+    save(`${name}.png`, png);
+    save(`${name}.team.png`, team);
     fs.writeFileSync(path.join(OUT_DIR, `${name}.json`), JSON.stringify(meta) + '\n');
     console.log(`baked ${name}: ${meta.rows.length} rows`);
   }

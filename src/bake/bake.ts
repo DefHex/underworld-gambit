@@ -4,7 +4,8 @@ import { Pose, Rig } from './rig';
 /**
  * Sprite baker: renders a posed low-poly model from the 8 Doom viewing angles at pixel-art
  * resolution (no antialiasing, toon bands), Dead Cells style. The output sheet has the same layout
- * as the CC0 sheets in art/sprites: one row per frame, one 128px cell per angle, cyan background.
+ * as described in scripts/sprites/build-sprites.mjs: one row per frame, one cell per angle, cyan
+ * background. A second sheet masks the team-colored parts (white) for the game's palette swap.
  */
 
 export type Row = { pose: Pose } | { poses: Pose[] };
@@ -69,6 +70,32 @@ function cameraFor(pixelsPerUnit: number): THREE.OrthographicCamera {
 
 const toHex = (color: number) => '#' + color.toString(16).padStart(6, '0');
 
+const TEAM_MASK = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+const PLAIN_MASK = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+
+/** Renders the model again in flat white (team parts) and black (the rest). */
+function renderTeamMask(root: THREE.Object3D, camera: THREE.Camera): void {
+  const materials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    materials.set(object, object.material);
+    object.material = object.userData.team ? TEAM_MASK : PLAIN_MASK;
+  });
+  renderer.render(scene, camera);
+  for (const [mesh, material] of materials) mesh.material = material;
+}
+
+/** An empty sheet canvas for `rows` rows of 8 cells. */
+function sheetCanvas(rows: number, background: string): CanvasRenderingContext2D {
+  const canvas = document.createElement('canvas');
+  canvas.width = CELL * 8;
+  canvas.height = CELL * rows;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return ctx;
+}
+
 /** Bounds of the visible meshes only (hidden props such as a raised meteor must not change the scale). */
 function visibleBounds(root: THREE.Object3D): THREE.Box3 {
   root.updateWorldMatrix(true, true);
@@ -81,7 +108,7 @@ function visibleBounds(root: THREE.Object3D): THREE.Box3 {
   return bounds;
 }
 
-export function bakeCharacter(character: Character): { png: string; meta: BakedSheetMeta } {
+export function bakeCharacter(character: Character): { png: string; team: string; meta: BakedSheetMeta } {
   const rig = character.build();
   rig.freeze();
   scene.add(rig.root);
@@ -92,17 +119,15 @@ export function bakeCharacter(character: Character): { png: string; meta: BakedS
   const bounds = visibleBounds(rig.root);
   const camera = cameraFor((PIXELS_PER_SQUARE * character.height) / (bounds.max.y - bounds.min.y));
 
-  const sheet = document.createElement('canvas');
-  sheet.width = CELL * 8;
-  sheet.height = CELL * character.rows.length;
-  const ctx = sheet.getContext('2d')!;
-  ctx.fillStyle = CYAN;
-  ctx.fillRect(0, 0, sheet.width, sheet.height);
+  const colors = sheetCanvas(character.rows.length, CYAN);
+  const mask = sheetCanvas(character.rows.length, '#000000');
   const draw = (pose: Pose, view: number, column: number, row: number) => {
     rig.pose(pose);
     rig.root.rotation.y = -view * (Math.PI / 4);
     renderer.render(scene, camera);
-    ctx.drawImage(renderer.domElement, column * CELL, row * CELL);
+    colors.drawImage(renderer.domElement, column * CELL, row * CELL);
+    renderTeamMask(rig.root, camera);
+    mask.drawImage(renderer.domElement, column * CELL, row * CELL);
   };
   character.rows.forEach((row, r) => {
     if ('pose' in row) for (let view = 0; view < 8; view++) draw(row.pose, view, view, r);
@@ -111,7 +136,8 @@ export function bakeCharacter(character: Character): { png: string; meta: BakedS
   scene.remove(rig.root);
 
   return {
-    png: sheet.toDataURL('image/png'),
+    png: colors.canvas.toDataURL('image/png'),
+    team: mask.canvas.toDataURL('image/png'),
     meta: {
       cell: { w: CELL, h: CELL },
       anchor: ANCHOR,

@@ -10,6 +10,8 @@ export interface BodyLook {
   boots: number;
   hair?: number;
   eyes?: number;
+  /** Clothing recolored white or black per team in the game (the rest keeps its colors). */
+  team?: ('shirt' | 'sleeves' | 'pants')[];
 }
 
 export interface BodyShape {
@@ -29,14 +31,15 @@ export function humanoid(rig: Rig, parent: string | null, look: BodyLook, { y = 
   const s = scale, h = s * head, l = s * limbs;
   const sleeves = look.sleeves ?? look.shirt;
   const eyes = look.eyes ?? 0x1a1010;
+  const team = (part: 'shirt' | 'sleeves' | 'pants') => ({ team: look.team?.includes(part) ?? false });
   rig.joint('hips', parent, 0, y + 0.92 * s, 0);
-  rig.attach('hips', [box(0.34 * s, 0.18 * s, 0.22 * s, look.pants)]);
+  rig.attach('hips', [box(0.34 * s, 0.18 * s, 0.22 * s, look.pants)], team('pants'));
 
   rig.joint('spine', 'hips', 0, 0.06 * s, 0);
   rig.attach('spine', [
     box(0.38 * s, 0.5 * s, 0.24 * s, look.shirt, { y: 0.26 * s }),
     box(0.32 * s, 0.1 * s, 0.22 * s, look.shirt, { y: 0.5 * s }),
-  ]);
+  ], team('shirt'));
 
   rig.joint('head', 'spine', 0, 0.56 * s, 0);
   rig.attach('head', [
@@ -49,20 +52,18 @@ export function humanoid(rig: Rig, parent: string | null, look: BodyLook, { y = 
 
   for (const [side, x] of [['L', 1], ['R', -1]] as const) {
     rig.joint(`arm${side}`, 'spine', x * 0.25 * s, 0.48 * s, 0);
-    rig.attach(`arm${side}`, [ball(0.075 * l, sleeves), cyl(0.058 * l, 0.052 * l, 0.3 * s, sleeves, { y: -0.15 * s })]);
+    rig.attach(`arm${side}`, [ball(0.075 * l, sleeves), cyl(0.058 * l, 0.052 * l, 0.3 * s, sleeves, { y: -0.15 * s })], team('sleeves'));
     rig.joint(`fore${side}`, `arm${side}`, 0, -0.3 * s, 0);
-    rig.attach(`fore${side}`, [cyl(0.05 * l, 0.045 * l, 0.27 * s, sleeves, { y: -0.135 * s })]);
+    rig.attach(`fore${side}`, [cyl(0.05 * l, 0.045 * l, 0.27 * s, sleeves, { y: -0.135 * s })], team('sleeves'));
     rig.joint(`hand${side}`, `fore${side}`, 0, -0.27 * s, 0);
     rig.attach(`hand${side}`, [ball(0.06 * l, look.skin, { y: -0.04 * s })]);
     rig.setRest(`arm${side}`, 0, 0, x * 8);
 
     rig.joint(`leg${side}`, 'hips', x * 0.1 * s, -0.06 * s, 0);
-    rig.attach(`leg${side}`, [cyl(0.085 * l, 0.07 * l, 0.42 * s, look.pants, { y: -0.21 * s })]);
+    rig.attach(`leg${side}`, [cyl(0.085 * l, 0.07 * l, 0.42 * s, look.pants, { y: -0.21 * s })], team('pants'));
     rig.joint(`shin${side}`, `leg${side}`, 0, -0.42 * s, 0);
-    rig.attach(`shin${side}`, [
-      cyl(0.068 * l, 0.058 * l, 0.38 * s, look.pants, { y: -0.19 * s }),
-      box(0.13 * l, 0.1 * s, 0.24 * s, look.boots, { y: -0.4 * s, z: 0.04 * s }),
-    ]);
+    rig.attach(`shin${side}`, [cyl(0.068 * l, 0.058 * l, 0.38 * s, look.pants, { y: -0.19 * s })], team('pants'));
+    rig.attach(`shin${side}`, [box(0.13 * l, 0.1 * s, 0.24 * s, look.boots, { y: -0.4 * s, z: 0.04 * s })]);
   }
 }
 

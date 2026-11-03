@@ -17,6 +17,10 @@ void main() {
   vec2 corner = (position.xy + 0.5 - anchor) * frameSize * worldScale;
   float c = cos(roll), s = sin(roll);
   mvPosition.xy += vec2(c * corner.x - s * corner.y, s * corner.x + c * corner.y);
+  // The sprite is a flat card standing on its square's center, but its feet, hems and tower bases are
+  // drawn as if in front of that center. Pull the card toward the camera (screen position unchanged
+  // with these orthographic cameras) so the floor of its own square never covers them.
+  mvPosition.z += 0.5;
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
 }`;
@@ -66,9 +70,6 @@ export class PixelSpriteMaterial extends THREE.ShaderMaterial {
         opacity: { value: 1 },
       },
     });
-    // Pull the sprite a little toward the camera so its feet never flicker against the floor.
-    this.polygonOffset = true;
-    this.polygonOffsetUnits = -4;
   }
 
   get color(): THREE.Color { return this.uniforms.tint.value; }

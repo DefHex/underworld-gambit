@@ -16,10 +16,14 @@ const LEGS: [name: string, x: number, z: number][] = [['FL', 0.2, 0.48], ['FR', 
 
 function buildHorse(rig: Rig): void {
   rig.joint('horse', null, 0, 1.05, 0);
+  // The horse's coat, mane and the rider's hat take the team color: a white horse and a white hat,
+  // or black ones. Saddle, blanket, white socks and blaze keep theirs.
   rig.attach('horse', [
     ball(0.5, COAT, { sx: 0.75, sy: 0.78, sz: 1.45 }, 12, 8),
     ball(0.34, COAT, { y: 0.04, z: 0.48 }),
     ball(0.36, COAT, { y: 0.06, z: -0.48 }),
+  ], { team: true });
+  rig.attach('horse', [
     box(0.62, 0.06, 0.62, BLANKET, { y: 0.37, z: 0.02 }),
     box(0.44, 0.1, 0.44, SADDLE, { y: 0.41, z: 0.02 }),
     cyl(0.04, 0.05, 0.14, SADDLE, { y: 0.48, z: 0.22 }, 5),
@@ -29,28 +33,30 @@ function buildHorse(rig: Rig): void {
   rig.attach('neck', [
     box(0.24, 0.66, 0.3, COAT, { y: 0.3 }),
     ...[0.1, 0.25, 0.4, 0.55].map((y) => box(0.07, 0.16, 0.12, MANE, { y, z: -0.16 })),
-  ]);
+  ], { team: true });
   rig.setRest('neck', 35, 0, 0);
   rig.joint('horseHead', 'neck', 0, 0.6, 0.02);
   rig.attach('horseHead', [
     box(0.22, 0.24, 0.5, COAT, { y: 0.0, z: 0.18 }),
     box(0.18, 0.18, 0.16, 0x5a3420, { y: -0.02, z: 0.44 }),
-    box(0.07, 0.03, 0.38, MARKINGS, { y: 0.125, z: 0.22 }),
     cone(0.04, 0.12, COAT, { x: 0.07, y: 0.17, z: -0.04 }, 4),
     cone(0.04, 0.12, COAT, { x: -0.07, y: 0.17, z: -0.04 }, 4),
+  ], { team: true });
+  rig.attach('horseHead', [
+    box(0.07, 0.03, 0.38, MARKINGS, { y: 0.125, z: 0.22 }),
     box(0.03, 0.04, 0.04, 0x101010, { x: 0.115, y: 0.05, z: 0.1 }),
     box(0.03, 0.04, 0.04, 0x101010, { x: -0.115, y: 0.05, z: 0.1 }),
   ]);
   rig.setRest('horseHead', 20, 0, 0);
   rig.joint('tail', 'horse', 0, 0.16, -0.72);
-  rig.attach('tail', [cone(0.1, 0.62, MANE, { y: 0.3 }, 5)]);
+  rig.attach('tail', [cone(0.1, 0.62, MANE, { y: 0.3 }, 5)], { team: true });
   rig.setRest('tail', -145, 0, 0);
   for (const [name, x, z] of LEGS) {
     rig.joint(`leg${name}`, 'horse', x, -0.15, z);
-    rig.attach(`leg${name}`, [cyl(0.1, 0.08, 0.45, COAT, { y: -0.22 }, 6)]);
+    rig.attach(`leg${name}`, [cyl(0.1, 0.08, 0.45, COAT, { y: -0.22 }, 6)], { team: true });
     rig.joint(`knee${name}`, `leg${name}`, 0, -0.45, 0);
+    rig.attach(`knee${name}`, [cyl(0.065, 0.06, 0.4, COAT, { y: -0.2 }, 5)], { team: true });
     rig.attach(`knee${name}`, [
-      cyl(0.065, 0.06, 0.4, COAT, { y: -0.2 }, 5),
       cyl(0.07, 0.07, 0.14, MARKINGS, { y: -0.36 }, 5),
       box(0.14, 0.08, 0.16, MANE, { y: -0.46, z: 0.01 }),
     ]);
@@ -68,6 +74,8 @@ function buildRider(rig: Rig): void {
   rig.attach('hat', [
     cyl(0.4 * s, 0.4 * s, 0.05 * s, HAT, {}, 12),
     cyl(0.18 * s, 0.22 * s, 0.24 * s, HAT, { y: 0.13 * s }, 8),
+  ], { team: true });
+  rig.attach('hat', [
     cyl(0.225 * s, 0.225 * s, 0.05 * s, HAT_BAND, { y: 0.04 * s }, 8),
   ]);
   rig.joint('gun', 'handR', 0, -0.06 * s, 0.02);

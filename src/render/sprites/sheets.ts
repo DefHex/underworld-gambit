@@ -24,9 +24,11 @@ export interface SheetData {
   size: { w: number; h: number };
   unitsPerTexel: number;
   palette: string[];
-  /** 5th, 50th and 95th percentile of the sprite's pixel luminance. */
+  /** Palette indices of the team-colored parts (robes, the horse, the tower's stone). */
+  team: number[];
+  /** 5th, 50th and 95th percentile of the team pixels' luminance. */
   luminance: [number, number, number];
-  /** Palette indices that keep their own color on every team (fire, flashes, blood, magic). */
+  /** Palette indices that glow (fire, flashes, blood, magic): drawn as is, even on the Underworld. */
   keep: number[];
   frames: SheetFrame[];
   tags: Partial<Record<SpriteTag, SheetTag>>;
@@ -40,23 +42,27 @@ const PALETTE_ROWS = PIECE_ORDER.length * VARIANTS_PER_PIECE;
 // ---------- team palettes ----------
 
 type Ramp = [number, string][];
-/** `middle`: where on the ramp a sprite's median brightness lands (White sits lighter than Black). */
-interface Look { ramp: Ramp; middle: number; outline: string }
-/** Each piece's own shading is mapped onto its team's ramp: cream and gold for White, purple and silver for Black. */
+type Rgb = [number, number, number];
+/**
+ * How a team looks on a board. Only the team-colored parts follow `ramp` (the sprite's own shading
+ * mapped from dark to light, `middle` = where its median tone lands); everything else keeps its
+ * colors, multiplied by `tint` (the Underworld's hellish light).
+ */
+interface Look { ramp: Ramp; middle: number; outline: string; tint: Rgb }
+const DAYLIGHT: Rgb = [1, 1, 1];
+const HELLFIRE: Rgb = [0.95, 0.76, 0.72];
 const LOOKS: Record<BoardId, [Look, Look]> = {
   0: [
-    { ramp: [[0, '#2a1a0c'], [0.3, '#7a5428'], [0.6, '#cfa457'], [0.82, '#eedcae'], [1, '#fffaee']], middle: 0.66, outline: '#1a1008' },
-    { ramp: [[0, '#08050c'], [0.3, '#26183a'], [0.6, '#5a4a86'], [0.82, '#a6a8c8'], [1, '#e6e8ff']], middle: 0.4, outline: '#05030a' },
+    { ramp: [[0, '#3a3230'], [0.35, '#8e867a'], [0.65, '#dcd4c4'], [1, '#fffcf4']], middle: 0.7, outline: '#1a1410', tint: DAYLIGHT },
+    { ramp: [[0, '#07060a'], [0.35, '#1e1a26'], [0.65, '#463f54'], [1, '#867e9c']], middle: 0.36, outline: '#000000', tint: DAYLIGHT },
   ],
   1: [
-    { ramp: [[0, '#1e0c06'], [0.3, '#6a3016'], [0.6, '#c86c2c'], [0.82, '#f2b474'], [1, '#ffe6be']], middle: 0.62, outline: '#1a0804' },
-    { ramp: [[0, '#06030c'], [0.3, '#22104a'], [0.6, '#5c2aa8'], [0.82, '#a77af0'], [1, '#e2ccff']], middle: 0.42, outline: '#6a3ac0' },
+    { ramp: [[0, '#2a100a'], [0.35, '#7a3a24'], [0.65, '#d08a5a'], [1, '#ffdcb4']], middle: 0.66, outline: '#1a0804', tint: HELLFIRE },
+    { ramp: [[0, '#08040e'], [0.35, '#241048'], [0.65, '#5a2aa0'], [1, '#a684ec']], middle: 0.4, outline: '#6a3ac0', tint: HELLFIRE },
   ],
 };
-/** How much of a sprite's original hue survives the recolor. */
-const ORIGINAL_HUE = 0.22;
-
-type Rgb = [number, number, number];
+/** How much of a team part's own hue survives under the team color (a hint of the drawn color). */
+const TEAM_HUE = 0.28;
 
 const hexToRgb = (hex: string): Rgb => {
   const v = Number.parseInt(hex.slice(1), 16);
@@ -81,19 +87,21 @@ function rampPosition(luminance: number, [low, median, high]: [number, number, n
   return middle + (0.94 - middle) * Math.min(1, (luminance - median) / Math.max(0.01, high - median));
 }
 
+/** The color one palette entry gets for a team on a board. */
+function teamColor(index: number, hex: string, data: SheetData, look: Look): Rgb {
+  if (index === 0) return [0, 0, 0];
+  if (index === 1) return hexToRgb(look.outline);
+  const original = hexToRgb(hex);
+  if (data.keep.includes(index)) return original;
+  if (!data.team.includes(index)) return original.map((value, channel) => value * look.tint[channel]) as Rgb;
+  const luminance = 0.2126 * original[0] + 0.7152 * original[1] + 0.0722 * original[2];
+  const team = sampleRamp(look.ramp, rampPosition(luminance, data.luminance, look.middle));
+  return team.map((value, channel) => value + (original[channel] - value) * TEAM_HUE) as Rgb;
+}
+
 function writePaletteRow(target: Uint8Array, row: number, data: SheetData, look: Look): void {
   data.palette.forEach((hex, index) => {
-    let color: Rgb;
-    if (index === 0) color = [0, 0, 0];
-    else if (index === 1) color = hexToRgb(look.outline);
-    else {
-      const original = hexToRgb(hex);
-      const luminance = 0.2126 * original[0] + 0.7152 * original[1] + 0.0722 * original[2];
-      const team = sampleRamp(look.ramp, rampPosition(luminance, data.luminance, look.middle));
-      color = data.keep.includes(index)
-        ? original
-        : team.map((value, channel) => value + (original[channel] - value) * ORIGINAL_HUE) as Rgb;
-    }
+    const color = teamColor(index, hex, data, look);
     const offset = (row * 256 + index) * 4;
     target.set([color[0] * 255, color[1] * 255, color[2] * 255, index === 0 ? 0 : 255].map(Math.round), offset);
   });

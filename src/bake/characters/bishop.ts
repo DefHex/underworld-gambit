@@ -29,12 +29,12 @@ function mitre(): THREE.BufferGeometry[] {
 
 function build(): Rig {
   const rig = new Rig();
-  humanoid(rig, null, { skin: SKIN, shirt: CHASUBLE, sleeves: ALB, pants: ALB, boots: 0x3a2030, hair: HAIR });
+  humanoid(rig, null, { skin: SKIN, shirt: CHASUBLE, sleeves: ALB, pants: ALB, boots: 0x3a2030, hair: HAIR, team: ['shirt'] });
   rig.joint('skirt', 'hips', 0, 0.06, 0);
   rig.attach('skirt', [pleatedLathe([[0.2, 0], [0.25, -0.3], [0.32, -0.7], [0.36, -0.96], [0, -0.96]], ALB, 8, 0.1)]);
   // Chasuble: a bell from the shoulders to the knees with a gold hem and a big gold cross on the front.
+  rig.attach('spine', [lathe([[0.16, 0.6], [0.3, 0.5], [0.38, 0.1], [0.44, -0.45], [0, -0.45]], CHASUBLE, 12)], { team: true });
   rig.attach('spine', [
-    lathe([[0.16, 0.6], [0.3, 0.5], [0.38, 0.1], [0.44, -0.45], [0, -0.45]], CHASUBLE, 12),
     lathe([[0.445, -0.36], [0.45, -0.45], [0.38, -0.45], [0.39, -0.36]], GOLD, 12),
     box(0.09, 0.72, 0.03, GOLD, { y: 0.06, z: 0.4, rx: -0.12 }),
     box(0.4, 0.09, 0.03, GOLD, { y: 0.3, z: 0.355, rx: -0.12 }),

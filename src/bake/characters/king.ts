@@ -15,17 +15,17 @@ const ermineSpots = (count: number, r: number, y: number) => around(count, r, (x
 
 function build(): Rig {
   const rig = new Rig();
-  humanoid(rig, null, { skin: SKIN, shirt: ROBE, pants: ROBE, boots: 0x3a2418, hair: BEARD });
+  humanoid(rig, null, { skin: SKIN, shirt: ROBE, pants: ROBE, boots: 0x3a2418, hair: BEARD, team: ['shirt', 'sleeves', 'pants'] });
   rig.joint('skirt', 'hips', 0, 0.06, 0);
+  rig.attach('skirt', [pleatedLathe([[0.2, 0], [0.26, -0.26], [0.34, -0.66], [0.4, -0.96], [0, -0.96]], ROBE, 8, 0.1)], { team: true });
   rig.attach('skirt', [
-    pleatedLathe([[0.2, 0], [0.26, -0.26], [0.34, -0.66], [0.4, -0.96], [0, -0.96]], ROBE, 8, 0.1),
     lathe([[0.405, -0.82], [0.415, -0.96], [0.3, -0.96], [0.31, -0.82]], ERMINE, 12),
     ...ermineSpots(8, 0.41, -0.89),
   ]);
   rig.attach('hips', [box(0.42, 0.07, 0.26, GOLD, { y: 0.05 })]);
   const cape = pleat(new THREE.CylinderGeometry(0.26, 0.48, 1.3, 24, 1, true, Math.PI / 2, Math.PI), 7, 0.08);
+  rig.attach('spine', [part(cape, ROBE, { y: -0.12, z: -0.02 })], { team: true });
   rig.attach('spine', [
-    part(cape, ROBE, { y: -0.12, z: -0.02 }),
     ring(0.22, 0.08, ERMINE, { y: 0.52 }),
     ...ermineSpots(6, 0.26, 0.52),
   ]);

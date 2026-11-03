@@ -59,9 +59,10 @@ function build(): Rig {
   const texture = brickTexture();
   rig.joint('tower', null);
   rig.joint('lower', 'tower');
-  rig.attachObject('lower', brickCylinder(texture, RADIUS + 0.02, RADIUS, SPLIT, 0.4));
+  // The stone (bricks, plinth, battlements, rubble) takes the team color; the wizard keeps his blue.
+  rig.attachObject('lower', brickCylinder(texture, RADIUS + 0.02, RADIUS, SPLIT, 0.4), { team: true });
+  rig.attach('lower', [cyl(RADIUS + 0.08, RADIUS + 0.1, 0.1, STONE, { y: 0.05 }, 16)], { team: true });
   rig.attach('lower', [
-    cyl(RADIUS + 0.08, RADIUS + 0.1, 0.1, STONE, { y: 0.05 }, 16),
     box(0.26, 0.36, 0.08, DOOR, { y: 0.18, z: RADIUS - 0.01 }),
     cyl(0.13, 0.13, 0.08, DOOR, { y: 0.36, z: RADIUS - 0.01, rx: Math.PI / 2 }, 8),
   ]);
@@ -72,11 +73,13 @@ function build(): Rig {
   ]);
   rig.joint('upper', 'tower', 0, SPLIT, 0);
   const upperHeight = TOWER_HEIGHT - SPLIT;
-  rig.attachObject('upper', brickCylinder(texture, RADIUS, RADIUS - 0.02, upperHeight, 0.36));
+  rig.attachObject('upper', brickCylinder(texture, RADIUS, RADIUS - 0.02, upperHeight, 0.36), { team: true });
   rig.attach('upper', [
     cyl(RADIUS + 0.08, RADIUS - 0.02, 0.12, STONE, { y: upperHeight + 0.02 }, 16),
     cyl(RADIUS + 0.06, RADIUS + 0.06, 0.04, STONE, { y: upperHeight + 0.08 }, 16),
     ...around(8, RADIUS + 0.02, (x, z, angle) => box(0.2, 0.2, 0.14, STONE, { x, y: upperHeight + 0.2, z, ry: angle })),
+  ], { team: true });
+  rig.attach('upper', [
     box(0.06, 0.18, 0.04, SLIT, { y: 0.28, z: RADIUS - 0.01 }),
     cyl(0.025, 0.025, 0.7, POLE, { x: -0.3, y: upperHeight + 0.45, z: -0.3 }, 4),
     box(0.02, 0.18, 0.3, BANNER, { x: -0.3, y: upperHeight + 0.7, z: -0.15 }),
@@ -98,7 +101,7 @@ function build(): Rig {
   rig.joint('meteor', 'tower', 0, TOWER_HEIGHT + 1.45, 0, true);
   rig.attachObject('meteor', glowBurst(0.3, FIRE, FIRE_TIPS));
   rig.joint('rubble', null, 0, 0, 0, true);
-  rig.attach('rubble', rubble());
+  rig.attach('rubble', rubble(), { team: true });
   return rig;
 }
 

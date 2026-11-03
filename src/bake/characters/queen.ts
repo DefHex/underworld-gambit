@@ -14,10 +14,10 @@ const WHIP_LINKS = 6;
 
 function build(): Rig {
   const rig = new Rig();
-  humanoid(rig, null, { skin: SKIN, shirt: BODICE, sleeves: BODICE, pants: GOWN, boots: BODICE, hair: HAIR, eyes: 0x200a20 });
+  humanoid(rig, null, { skin: SKIN, shirt: BODICE, sleeves: BODICE, pants: GOWN, boots: BODICE, hair: HAIR, eyes: 0x200a20, team: ['shirt', 'sleeves', 'pants'] });
   rig.joint('skirt', 'hips', 0, 0.06, 0);
+  rig.attach('skirt', [pleatedLathe([[0.2, 0], [0.3, -0.3], [0.46, -0.7], [0.56, -0.96], [0, -0.96]], GOWN, 10, 0.12)], { team: true });
   rig.attach('skirt', [
-    pleatedLathe([[0.2, 0], [0.3, -0.3], [0.46, -0.7], [0.56, -0.96], [0, -0.96]], GOWN, 10, 0.12),
     lathe([[0.565, -0.86], [0.57, -0.96], [0.45, -0.96], [0.46, -0.86]], GOLD, 14),
   ]);
   rig.attach('hips', [box(0.4, 0.07, 0.26, GOLD, { y: 0.07 })]);
@@ -25,8 +25,8 @@ function build(): Rig {
   rig.attach('spine', [
     part(collar, GOLD, { y: 0.66, z: -0.04 }),
     box(0.12, 0.2, 0.02, SKIN, { y: 0.44, z: 0.125, rz: Math.PI / 4 }), // neckline
-    ball(0.12, GOWN, { x: 0.27, y: 0.47 }), ball(0.12, GOWN, { x: -0.27, y: 0.47 }), // puffed sleeves
   ]);
+  rig.attach('spine', [ball(0.12, GOWN, { x: 0.27, y: 0.47 }), ball(0.12, GOWN, { x: -0.27, y: 0.47 })], { team: true }); // puffed sleeves
   rig.attach('head', [box(0.4, 0.6, 0.14, HAIR, { y: FACE_Y - 0.18, z: -0.12 })]);
   rig.joint('crown', 'head', 0, FACE_Y + 0.15, 0);
   rig.attach('crown', [

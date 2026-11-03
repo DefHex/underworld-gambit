@@ -76,8 +76,10 @@ async function playAiTurn(): Promise<void> {
 controller.blocked = () => aiThinking || (opponentMode > 0 && controller.pos.side === 1) || tutorial.locked;
 controller.onMoved = () => { if (tutorial.active) void tutorial.moved(); else void playAiTurn(); };
 
+/** A fresh game on freshly grown terrain. */
 function newGame(): void {
   cancelAiTurn();
+  world.newTerrain();
   game = new Game({ secondChance: settings.secondChance });
   controller.setGame(game);
 }
@@ -268,6 +270,7 @@ function startTutorial(): void {
   audio.play('start');
   if (world.dual) world.toggleTactical();
   controller.goTo(0);
+  world.newTerrain();
   game = tutorialGame();
   controller.setGame(game);
   leaveMenu();

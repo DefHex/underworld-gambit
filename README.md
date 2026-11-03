@@ -103,7 +103,8 @@ src/audio      howler.js wrapper (SFX + music cross-fade between boards)
 src/platform   settings.ts (localStorage), haptics.ts (Capacitor or navigator.vibrate)
 src/main.ts    Wiring, AI turns, toolbar, menus. Exposes window.__uw for debugging.
 src/bake       Piece models and the sprite baker (dev page /bake.html, see Pixel-art pieces)
-tests/         rules, perft, ai, invariants, tutorial, sprites (sheet validation); selfplay/ (excluded by default)
+src/terrain    Wave Function Collapse terrain generator: a new board every game (see Terrain)
+tests/         rules, perft, ai, invariants, tutorial, sprites (sheet validation), terrain (generator); selfplay/ (excluded by default)
 scripts/       gen-audio.mjs, selfplay.ts, run-selfplay.mjs, sprites/ (bake and build), check-sprites.mjs
 art/sprites/   Baked sprite sheets (see Pixel-art pieces)
 ```
@@ -142,7 +143,9 @@ Every piece is a Wolfenstein-style pixel sprite: big chunky pixels, three light 
 - **Animations** (`src/render/exec/<piece>.ts`, effects in `effects.ts`): 2 moves and 3 kills per piece. Preview frames at `/models.html` (`?yaw=90`, `&under=1`, `&tag=atk_a&step=1`).
 
 ### Terrain
-`terrain.ts` has two 8×8 character maps. Overworld: `g` grass, `f` forest, `m` mountain, `h` hills, `r` river. Underworld: `a` ash, `l` lava, `m` obsidian ridge, `f` dead forest, `b` bone field. Light/dark squares get a contrast overlay so the checker stays readable. Features are small and at tile corners; every tile top is at y = 0 so animations can assume one ground height.
+Every new game (and the tutorial) grows fresh terrain for both boards with **Wave Function Collapse** (`src/terrain`, simple tiled model): each square starts able to be any tile; the solver keeps deciding the square with the fewest options left (weighted random) and removes whatever no longer fits from its neighbors, restarting on a dead end. Rivers and lava are six pieces (two straights, four bends) whose edges must join up, so streams always flow in from one board edge and out at another; neighbor rules keep mountains inside hills and forest and away from rivers, and bone fields away from lava. `isGoodBoard` rejects boards with odd amounts of anything or streams that are too short or loop back. Tune the weights, neighbor rules and counts in `src/terrain/generate.ts`; `World.newTerrain(seed?)` regrows it (`__uw.world.terrainSeed` shows the seed). Terrain is scenery only and never affects the rules.
+
+`terrain.ts` paints a map (8 strings of 8 letters, rank 8 first). Overworld: `g` grass, `f` forest, `m` mountain, `h` hills, `r` river. Underworld: `a` ash, `l` lava, `m` obsidian ridge, `f` dead forest, `b` bone field. Light/dark squares get a contrast overlay so the checker stays readable. Features are small and at tile corners; every tile top is at y = 0 so animations can assume one ground height.
 
 ## Testing
 

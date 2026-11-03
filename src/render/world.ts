@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Easing, animating, clock, resetClockGap, start, tickTweens, tween, tweens } from './tween';
 import type { BoardId, Move, MoveInfo, Piece, Position } from '../rules';
 import { Fx } from './fx';
-import { addBoneFieldModels } from './terrain';
-import { buildBoardScene } from './board-scene';
+import { buildBoardScene, buildTerrain, disposeTerrain } from './board-scene';
+import { generateTerrain } from '../terrain/generate';
 import { BOARD_GAP, Rect, boardY, squarePoint, squareToXZ } from './coords';
 import { dualBoardRects, portalRectFor } from './layout';
 import { MarkerSet, fillMarkers } from './markers';
@@ -44,6 +44,10 @@ export class World {
   zoom = 1;
   pending = 0;
   lastStyle = '';
+  /** Seed of the current terrain: every game grows its own boards. */
+  terrainSeed = 0;
+  /** Each board's tiles and terrain features, replaced by newTerrain(). */
+  private terrain: THREE.Group[] = [new THREE.Group(), new THREE.Group()];
   /** Animations in flight, so a reset can clear their props. */
   private kits = new Set<Kit>();
   private lastPortrait = false;
@@ -62,10 +66,25 @@ export class World {
     this.boards[1].position.y = boardY(1);
     buildBoardScene(this.boards[0], 0);
     buildBoardScene(this.boards[1], 1);
-    void addBoneFieldModels(this.boards[1]).then(() => this.invalidate());
+    this.newTerrain();
     this.boards.forEach((b, i) => b.add(this.markers[i]));
     window.addEventListener('resize', () => this.resize());
     this.resize();
+  }
+
+  // ---------- terrain ----------
+
+  /** Grows a fresh random terrain for both boards (Wave Function Collapse, see src/terrain/generate.ts). */
+  newTerrain(seed = Math.floor(Math.random() * 2 ** 31)): void {
+    this.terrainSeed = seed;
+    const maps = generateTerrain(seed);
+    [maps.over, maps.under].forEach((map, board) => {
+      this.boards[board].remove(this.terrain[board]);
+      disposeTerrain(this.terrain[board]);
+      this.terrain[board] = buildTerrain(board as BoardId, map, () => this.invalidate());
+      this.boards[board].add(this.terrain[board]);
+    });
+    this.invalidate();
   }
 
   // ---------- pieces ----------

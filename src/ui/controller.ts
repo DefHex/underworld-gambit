@@ -1,5 +1,6 @@
 import { BoardId, Game, Move, PieceType, Position, attacked, sqName } from '../rules';
-import { MarkerSet, World, emptyMarkers } from '../render/world';
+import { World } from '../render/world';
+import { MarkerSet, emptyMarkers } from '../render/markers';
 import * as audio from '../audio/audio';
 import { buzz } from '../platform/haptics';
 

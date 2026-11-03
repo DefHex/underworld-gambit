@@ -317,28 +317,10 @@ export class Position {
         info.destroyed = captured;
       } else if (b === OVER) {
         this.put(OVER, m.to, p);
-        if (captured.risen && secondChance) {
-          info.destroyed = captured;
-        } else {
-          this.snap(captured);
-          if (captured.promoted) { captured.type = 'p'; captured.promoted = false; }
-          if (captured.type === 'r') captured.hasMoved = true; // a fallen rook loses its castling right
-          captured.risen = false;
-          const to = this.landing(UNDER, captured, capSq);
-          if (to < 0) info.destroyed = captured;
-          else {
-            this.put(UNDER, to, captured);
-            info.fell = { piece: captured, from: capSq, to };
-          }
-        }
+        if (captured.risen && secondChance) info.destroyed = captured;
+        else this.dropToUnderworld(captured, capSq, info);
       } else {
-        // Underworld capture: victim destroyed for good, capturer rises.
-        info.destroyed = captured;
-        if (p.promoted) { p.type = 'p'; p.promoted = false; }
-        if (secondChance) p.risen = true;
-        const to = this.landing(OVER, p, m.to);
-        this.put(OVER, to, p);
-        info.rose = { piece: p, from: m.to, to };
+        this.riseWithCapturer(p, m.to, captured, info);
       }
     }
 
@@ -350,6 +332,31 @@ export class Position {
     this.ply++;
     this.lastInfo = info;
     return info;
+  }
+
+  /** Overworld capture: the victim falls to the nearest free Underworld square (or is destroyed if there is none). */
+  private dropToUnderworld(victim: Piece, capturedSquare: number, info: MoveInfo): void {
+    this.snap(victim);
+    if (victim.promoted) { victim.type = 'p'; victim.promoted = false; }
+    if (victim.type === 'r') victim.hasMoved = true; // a fallen rook loses its castling right
+    victim.risen = false;
+    const landingSquare = this.landing(UNDER, victim, capturedSquare);
+    if (landingSquare < 0) {
+      info.destroyed = victim;
+      return;
+    }
+    this.put(UNDER, landingSquare, victim);
+    info.fell = { piece: victim, from: capturedSquare, to: landingSquare };
+  }
+
+  /** Underworld capture: the victim is destroyed for good and the capturer rises to the Overworld. */
+  private riseWithCapturer(capturer: Piece, capturedSquare: number, victim: Piece, info: MoveInfo): void {
+    info.destroyed = victim;
+    if (capturer.promoted) { capturer.type = 'p'; capturer.promoted = false; }
+    if (this.options.secondChance) capturer.risen = true;
+    const landingSquare = this.landing(OVER, capturer, capturedSquare);
+    this.put(OVER, landingSquare, capturer);
+    info.rose = { piece: capturer, from: capturedSquare, to: landingSquare };
   }
 
   unmake(): void {

@@ -1,37 +1,20 @@
 import * as THREE from 'three';
-import { ball, box, cone, cyl, merge } from './pieces';
+import { ball, box, cone, cyl, merge } from './modeling';
 import { glow, mesh } from './exec/props';
 import { loadProp } from './models';
 
 /**
- * Stylized terrain for both boards. Each square has a biome; its color is the biome's, shaded
- * light or dark so the chessboard checker stays readable. Features are small and sit at tile
- * corners, so pieces are never hidden and always stand at the same height.
+ * Stylized terrain for both boards, painted from a map (see src/terrain/generate.ts, which grows a
+ * new one every game). Each square has a biome; its color is the biome's, shaded light or dark so
+ * the chessboard checker stays readable. Features are small and sit at tile corners, so pieces are
+ * never hidden and always stand at the same height.
  *
  * Overworld:  g grass, f forest, m mountain, h hills, r river
  * Underworld: a ash plain, l lava river, m obsidian ridge, f dead forest, b bone field
  */
-const OVER_MAP = [ // rank 8 at the top
-  'mmhgrghm',
-  'mfggrrgh',
-  'hfgggrgf',
-  'ggfggrrg',
-  'gfgggggr',
-  'ffghggrr',
-  'gfhggrrg',
-  'gggggrgg',
-];
-const HELL_MAP = [
-  'mmaaalam',
-  'mfaaallf',
-  'afaabaal',
-  'aabaaall',
-  'abaaaaal',
-  'ffabaall',
-  'abmaaall',
-  'aaaaalaa',
-];
-const biomeAt = (map: string[], sq: number) => map[7 - (sq >> 3)][sq & 7];
+
+/** The biome letter of a square in a map (8 strings, rank 8 first). */
+export const biomeAt = (map: string[], sq: number) => map[7 - (sq >> 3)][sq & 7];
 
 function rng(seed: number) { return () => ((seed = (seed * 16807) % 2147483647) / 2147483647); }
 
@@ -95,8 +78,7 @@ function tileTexture(over: boolean, biome: string, dark: boolean, variant: numbe
 }
 
 const matCache = new Map<string, THREE.Material>();
-export function tileMaterial(over: boolean, sq: number): THREE.Material {
-  const map = over ? OVER_MAP : HELL_MAP;
+export function tileMaterial(over: boolean, map: string[], sq: number): THREE.Material {
   const biome = biomeAt(map, sq);
   const dark = (((sq & 7) + (sq >> 3)) & 1) === 0;
   const variant = (sq * 7 + (sq >> 3)) % 3;
@@ -140,9 +122,8 @@ function deadTree(x: number, z: number, h: number, r: () => number): THREE.Buffe
 }
 
 /** Builds the feature meshes for a board. Overworld and Underworld each get their own set. */
-export function buildTerrainProps(over: boolean): THREE.Group {
+export function buildTerrainProps(over: boolean, map: string[]): THREE.Group {
   const root = new THREE.Group();
-  const map = over ? OVER_MAP : HELL_MAP;
   const solid: THREE.BufferGeometry[] = [];
   const hot: THREE.BufferGeometry[] = [];
   for (let sq = 0; sq < 64; sq++) {
@@ -190,16 +171,17 @@ export function buildTerrainProps(over: boolean): THREE.Group {
   }
   if (solid.length) root.add(mesh(merge(solid)));
   if (hot.length) root.add(new THREE.Mesh(merge(hot), glow(0xff7a30, 0.95)));
+  root.traverse((object) => { object.userData.ownsGeometry = true; }); // freed when the terrain is replaced
   return root;
 }
 
-/** KayKit skulls and rib cages on the bone fields of the Underworld. */
-export async function addBoneFieldModels(root: THREE.Object3D): Promise<void> {
+/** KayKit skulls and rib cages on the bone fields of an Underworld map. */
+export async function addBoneFieldModels(root: THREE.Object3D, map: string[]): Promise<void> {
   const skull = await loadProp('skull_candle', 0.3).catch(() => null);
   const ribs = await loadProp('ribcage', 0.16).catch(() => null);
   let n = 0;
   for (let sq = 0; sq < 64; sq++) {
-    if (biomeAt(HELL_MAP, sq) !== 'b') continue;
+    if (biomeAt(map, sq) !== 'b') continue;
     const proto = n % 2 ? ribs : skull;
     n++;
     if (!proto) continue;

@@ -3,7 +3,8 @@ import { Game, Position, parseSq, setup } from '../src/rules';
 import { Searcher, chooseMove } from '../src/ai';
 import { hashPosition } from '../src/ai/zobrist';
 
-const deep = { timeMs: 8000, maxDepth: 4, noise: 0 };
+// A deterministic search: no noise and no deliberate blunders, whatever the level's defaults.
+const deep = { timeMs: 8000, maxDepth: 4, noise: 0, blunder: 0 };
 
 describe('AI', () => {
   it('takes a hanging queen', () => {

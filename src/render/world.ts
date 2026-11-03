@@ -2,31 +2,18 @@ import * as THREE from 'three';
 import { Easing, animating, clock, resetClockGap, start, tickTweens, tween, tweens } from './tween';
 import type { BoardId, Move, MoveInfo, Piece, Position } from '../rules';
 import { Fx } from './fx';
-import { addBoneFieldModels, buildTerrainProps, tileMaterial } from './terrain';
-import { buildGildedFrame, buildHeavenGround, buildHellFrame, buildHellGround } from './decor';
+import { buildBoardScene, buildTerrain, disposeTerrain } from './board-scene';
+import { generateTerrain } from '../terrain/generate';
+import { BOARD_GAP, Rect, boardY, squarePoint, squareToXZ } from './coords';
+import { dualBoardRects, portalRectFor } from './layout';
+import { MarkerSet, fillMarkers } from './markers';
 import { Kit, pickStyle, restoreView } from './exec';
 import { settings } from '../platform/settings';
-import { PieceView, createPieceView, makeGhost, updatePieceView } from './pieces';
+import { PieceView, createPieceView, updatePieceView } from './pieces';
+import { PixelPass } from './pixel-pass';
+import { onSpriteSheetLoaded } from './sprites/sheets';
 
-export const GAP = 14; // vertical distance between the two boards in world space
-const FRUSTUM_H = 8.2; // world units visible vertically in the main view
-
-export const sqPos = (sq: number): [number, number] => [(sq & 7) - 3.5, 3.5 - (sq >> 3)];
-
-export interface Rect { x: number; y: number; w: number; h: number }
-
-export interface MarkerSet {
-  selected?: { b: BoardId; sq: number };
-  quiet: { b: BoardId; sq: number }[];
-  capture: { b: BoardId; sq: number }[];
-  attack: { b: BoardId; sq: number }[]; // squares the fallen victim will attack
-  threat: { b: BoardId; sq: number }[]; // own pieces under attack
-  ghosts: { b: BoardId; sq: number; type: Piece['type']; color: 0 | 1 }[];
-  rise?: { b: BoardId; sq: number; check: boolean };
-  /** Tutorial hints: the square to tap next. */
-  hints: { b: BoardId; sq: number }[];
-}
-export const emptyMarkers = (): MarkerSet => ({ quiet: [], capture: [], attack: [], threat: [], ghosts: [], hints: [] });
+const FRUSTUM_HEIGHT = 8.2; // world units visible vertically in the main view
 
 interface ViewState { yaw: number; pitch: number; cy: number }
 
@@ -57,93 +44,96 @@ export class World {
   zoom = 1;
   pending = 0;
   lastStyle = '';
+  /** Seed of the current terrain: every game grows its own boards. */
+  terrainSeed = 0;
+  /** Each board's tiles and terrain features, replaced by newTerrain(). */
+  private terrain: THREE.Group[] = [new THREE.Group(), new THREE.Group()];
   /** Animations in flight, so a reset can clear their props. */
   private kits = new Set<Kit>();
   private lastPortrait = false;
   private dirty = true;
   private running = false;
   private lastT = 0;
-  private tiles: THREE.Mesh[][] = [[], []];
+  private pixels: PixelPass;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.pixels = new PixelPass(this.renderer);
+    onSpriteSheetLoaded(() => this.invalidate());
     this.scene.add(...this.boards);
     this.fx = new Fx(this.scene);
-    this.boards[1].position.y = -GAP;
-    this.buildBoard(0);
-    this.buildBoard(1);
-    void addBoneFieldModels(this.boards[1]).then(() => this.invalidate());
+    this.boards[1].position.y = boardY(1);
+    buildBoardScene(this.boards[0], 0);
+    buildBoardScene(this.boards[1], 1);
+    this.newTerrain();
     this.boards.forEach((b, i) => b.add(this.markers[i]));
     window.addEventListener('resize', () => this.resize());
     this.resize();
   }
 
-  // ---------- construction ----------
+  // ---------- terrain ----------
 
-  private buildBoard(b: BoardId): void {
-    const g = this.boards[b];
-    const over = b === 0;
-    const tileGeo = new THREE.BoxGeometry(0.98, 0.3, 0.98);
-    for (let sq = 0; sq < 64; sq++) {
-      const t = new THREE.Mesh(tileGeo, tileMaterial(over, sq));
-      const [x, z] = sqPos(sq);
-      t.position.set(x, -0.15, z);
-      g.add(t);
-      this.tiles[b].push(t);
-    }
-    if (over) {
-      g.add(buildGildedFrame(), buildHeavenGround(), buildTerrainProps(true));
-    } else {
-      g.add(buildHellFrame(), buildHellGround(), buildTerrainProps(false));
-    }
-    if (over) {
-      g.add(new THREE.HemisphereLight(0xfff4de, 0xb0a080, 1.5));
-      const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-      sun.position.set(-6, 12, 5);
-      g.add(sun);
-    } else {
-      g.add(new THREE.HemisphereLight(0xa890d8, 0x301018, 1.5));
-      const ember = new THREE.PointLight(0xff5a1a, 32, 26, 1.4);
-      ember.position.set(0, 3, 0);
-      g.add(ember);
-      const rim = new THREE.DirectionalLight(0xb080ff, 1.2);
-      rim.position.set(5, 8, -4);
-      g.add(rim);
-    }
+  /** Grows a fresh random terrain for both boards (Wave Function Collapse, see src/terrain/generate.ts). */
+  newTerrain(seed = Math.floor(Math.random() * 2 ** 31)): void {
+    this.terrainSeed = seed;
+    const maps = generateTerrain(seed);
+    [maps.over, maps.under].forEach((map, board) => {
+      this.boards[board].remove(this.terrain[board]);
+      disposeTerrain(this.terrain[board]);
+      this.terrain[board] = buildTerrain(board as BoardId, map, () => this.invalidate());
+      this.boards[board].add(this.terrain[board]);
+    });
+    this.invalidate();
   }
 
   // ---------- pieces ----------
 
+  /** Makes the piece views match `pos`. Ids in `skip` are left alone (they are mid-animation). */
   syncPieces(pos: Position, animate: boolean, skip?: Set<number>): void {
-    const seen = new Set<number>();
-    for (const b of [0, 1] as BoardId[]) {
-      for (let sq = 0; sq < 64; sq++) {
-        const p = pos.boards[b][sq];
-        if (!p) continue;
-        seen.add(p.id);
-        if (skip?.has(p.id)) continue;
-        let v = this.views.get(p.id);
-        const [x, z] = sqPos(sq);
-        if (!v) {
-          v = createPieceView(p, b);
-          this.views.set(p.id, v);
-          v.position.set(x, 0, z);
-          this.boards[b].add(v);
-        } else {
-          updatePieceView(v, p, b);
-          const moved = v.parent !== this.boards[b];
-          if (moved) { this.boards[b].add(v); v.position.set(x, 0, z); v.scale.setScalar(1); }
-          else if (animate && (v.position.x !== x || v.position.z !== z)) {
-            start(tween(v.position).to({ x, z }, 260).easing(Easing.Cubic.Out));
-          } else v.position.set(x, 0, z);
-        }
+    const livePieceIds = new Set<number>();
+    for (const boardId of [0, 1] as BoardId[]) {
+      for (let square = 0; square < 64; square++) {
+        const piece = pos.boards[boardId][square];
+        if (!piece) continue;
+        livePieceIds.add(piece.id);
+        if (skip?.has(piece.id)) continue;
+        this.syncPieceView(piece, boardId, square, animate);
       }
     }
-    for (const [id, v] of this.views) {
-      if (!seen.has(id) && !skip?.has(id)) { v.parent?.remove(v); this.views.delete(id); }
+    for (const id of [...this.views.keys()]) {
+      if (!livePieceIds.has(id) && !skip?.has(id)) this.removeView(id);
     }
     this.invalidate();
+  }
+
+  private syncPieceView(piece: Piece, boardId: BoardId, square: number, animate: boolean): void {
+    const [x, z] = squareToXZ(square);
+    let view = this.views.get(piece.id);
+    if (!view) {
+      view = createPieceView(piece, boardId);
+      this.views.set(piece.id, view);
+      view.position.set(x, 0, z);
+      this.boards[boardId].add(view);
+      return;
+    }
+    updatePieceView(view, piece, boardId);
+    const changedBoard = view.parent !== this.boards[boardId];
+    if (changedBoard) {
+      this.boards[boardId].add(view);
+      view.position.set(x, 0, z);
+      view.scale.setScalar(1);
+    } else if (animate && (view.position.x !== x || view.position.z !== z)) {
+      start(tween(view.position).to({ x, z }, 260).easing(Easing.Cubic.Out));
+    } else {
+      view.position.set(x, 0, z);
+    }
+  }
+
+  private removeView(pieceId: number): void {
+    const view = this.views.get(pieceId);
+    view?.parent?.remove(view);
+    this.views.delete(pieceId);
   }
 
   // ---------- move animation ----------
@@ -155,7 +145,7 @@ export class World {
     tweens.removeAll();
     for (const kit of this.kits) kit.cleanup();
     this.kits.clear();
-    for (const v of this.views.values()) v.parent?.remove(v);
+    for (const view of this.views.values()) view.parent?.remove(view);
     this.views.clear();
     clock.scale = 1;
     this.pending = 0;
@@ -166,27 +156,10 @@ export class World {
     this.applyView(false);
   }
 
-  shake(amp: number): void {
-    this.shakeAmp = amp;
-    const o = { v: amp };
-    start(tween(o).to({ v: 0 }, 340).onUpdate(() => { this.shakeAmp = o.v; }));
-  }
-
-  private at(b: BoardId, sq: number, y = 0): THREE.Vector3 {
-    const [x, z] = sqPos(sq);
-    return new THREE.Vector3(x, (b ? -GAP : 0) + y, z);
-  }
-
-  private later(ms: number, fn: () => void): void {
-    start(tween({ t: 0 }).to({ t: 1 }, ms).onComplete(fn));
-  }
-
-  private shrinkAway(v: PieceView, id: number, then: () => void): void {
-    start(tween(v.scale).to({ x: 0.01, y: 0.01, z: 0.01 }, 320).easing(Easing.Cubic.In).onComplete(() => {
-      v.parent?.remove(v);
-      this.views.delete(id);
-      then();
-    }));
+  shake(amplitude: number): void {
+    this.shakeAmp = amplitude;
+    const decay = { amplitude };
+    start(tween(decay).to({ amplitude: 0 }, 340).onUpdate(() => { this.shakeAmp = decay.amplitude; }));
   }
 
   /**
@@ -195,82 +168,103 @@ export class World {
    * `pos` is the position after the move; the view is reconciled with it at the end.
    */
   async playMove(move: Move, info: MoveInfo, pos: Position): Promise<void> {
-    const { fell, rose, destroyed: dead } = info;
-    const victimPiece = fell?.piece ?? dead ?? null;
+    const { fell, rose, destroyed } = info;
+    const victimPiece = fell?.piece ?? destroyed ?? null;
     const moverPiece = rose ? rose.piece : pos.boards[move.board][move.to]!;
-    const a = this.views.get(moverPiece.id);
-    const v = victimPiece ? this.views.get(victimPiece.id) : undefined;
-    const special = new Set<number>();
-    if (victimPiece) special.add(victimPiece.id);
-    if (rose) special.add(rose.piece.id);
-    if (a) special.add(moverPiece.id);
+    const attackerView = this.views.get(moverPiece.id);
+    const victimView = victimPiece ? this.views.get(victimPiece.id) : undefined;
+
+    const animatedIds = new Set<number>();
+    if (victimPiece) animatedIds.add(victimPiece.id);
+    if (rose) animatedIds.add(rose.piece.id);
+    if (attackerView) animatedIds.add(moverPiece.id);
+
     this.pending++;
-    this.syncPieces(pos, true, special);
+    this.syncPieces(pos, true, animatedIds);
     const finish = () => {
       this.syncPieces(pos, false);
       if (move.promo) {
         this.onEvent('promote');
-        const [px, pz] = sqPos(move.to);
-        this.fx.burst(new THREE.Vector3(px, (move.board ? -GAP : 0) + 0.3, pz), 'gold', 30);
+        this.fx.burst(squarePoint(move.board, move.to, 0.3), 'gold', 30);
       }
       this.pending--;
       this.invalidate();
     };
-    if (!a) { finish(); return; }
+    if (!attackerView) { finish(); return; }
 
-    const g = this.boards[move.board];
-    const [fx0, fz0] = sqPos(move.from), [tx, tz] = sqPos(move.to);
-    const kit = new Kit(this, g, a, v ?? null, new THREE.Vector3(fx0, 0, fz0), new THREE.Vector3(tx, 0, tz),
-      () => this.onEvent(fell ? 'fall' : 'destroy'));
-    const type = a.userData.type;
-    const style = pickStyle(type, !!victimPiece, settings.cinematic && !move.castle);
-    this.lastStyle = `${type}${victimPiece ? ' kill' : ' move'}: ${style.name}`;
+    await this.playMoveStyle(move, attackerView, victimView ?? null, !!victimPiece, () => this.onEvent(fell ? 'fall' : 'destroy'));
+
+    if (rose) {
+      this.playRise(attackerView, rose, victimPiece?.id, finish);
+    } else if (fell && victimView) {
+      this.playFall(victimView, fell, move.to, finish);
+    } else {
+      if (victimPiece) this.removeView(victimPiece.id);
+      finish();
+    }
+    this.invalidate();
+  }
+
+  /** Runs the piece's cinematic (or plain slide) up to and including the victim's reaction. */
+  private async playMoveStyle(
+    move: Move, attackerView: PieceView, victimView: PieceView | null, isCapture: boolean, onImpact: () => void,
+  ): Promise<void> {
+    const [fromX, fromZ] = squareToXZ(move.from);
+    const [toX, toZ] = squareToXZ(move.to);
+    const kit = new Kit(
+      this, this.boards[move.board], attackerView, victimView,
+      new THREE.Vector3(fromX, 0, fromZ), new THREE.Vector3(toX, 0, toZ), onImpact,
+    );
+    const pieceType = attackerView.userData.type;
+    const style = pickStyle(pieceType, isCapture, settings.cinematic && !move.castle);
+    this.lastStyle = `${pieceType}${isCapture ? ' kill' : ' move'}: ${style.name}`;
     if (style.zoom) start(tween(this).to({ zoom: style.zoom }, 280).easing(Easing.Cubic.Out));
     this.kits.add(kit);
     try {
       await style.run(kit);
-      if (victimPiece && v && !kit.hitCalled) await kit.hit('squash');
+      if (isCapture && victimView && !kit.hitCalled) await kit.hit('squash');
       await kit.reaction;
     } finally {
       kit.cleanup();
       this.kits.delete(kit);
       if (style.zoom) start(tween(this).to({ zoom: 1 }, 320).easing(Easing.Cubic.InOut));
     }
+  }
 
-    if (rose) {
-      this.onEvent('rise');
-      const [rx, rz] = sqPos(rose.to);
-      this.fx.column(this.boards[0], rx, rz);
-      this.fx.burst(this.at(0, rose.to, 0.1), 'gold', 46, { speed: 1.2 });
-      this.shake(0.1);
-      if (v) { v.parent?.remove(v); this.views.delete(victimPiece!.id); }
-      this.boards[0].add(a);
-      a.position.set(rx, -1.8, rz);
-      a.scale.setScalar(0.7);
-      updatePieceView(a, rose.piece, 0);
-      start(tween(a.scale).to({ x: 1, y: 1, z: 1 }, 520).easing(Easing.Cubic.Out));
-      start(tween(a.position).to({ y: 0 }, 520).easing(Easing.Back.Out).onComplete(finish));
-    } else if (fell && v) {
-      restoreView(v);
-      this.fx.crack(this.boards[0], tx, tz);
-      this.fx.burst(this.at(0, fell.from, 0.1), 'ember', 30);
-      const [bx, bz] = sqPos(fell.to);
-      this.boards[1].add(v);
-      updatePieceView(v, fell.piece, 1);
-      v.position.set(bx, 0, bz);
-      v.scale.setScalar(0.01);
-      this.fx.burst(this.at(1, fell.to, 0.1), 'ember', 28, { speed: 0.7 });
-      start(tween(v.scale).to({ x: 1, y: 1, z: 1 }, 380).easing(Easing.Back.Out).onComplete(finish));
-    } else {
-      if (v) { v.parent?.remove(v); this.views.delete(victimPiece!.id); }
-      finish();
-    }
-    this.invalidate();
+  /** Underworld capture: the capturer bursts up out of the ground on the Overworld. */
+  private playRise(attackerView: PieceView, rose: NonNullable<MoveInfo['rose']>, victimId: number | undefined, onDone: () => void): void {
+    this.onEvent('rise');
+    const [x, z] = squareToXZ(rose.to);
+    this.fx.column(this.boards[0], x, z);
+    this.fx.burst(squarePoint(0, rose.to, 0.1), 'gold', 46, { speed: 1.2 });
+    this.shake(0.1);
+    if (victimId !== undefined) this.removeView(victimId);
+    this.boards[0].add(attackerView);
+    attackerView.position.set(x, -1.8, z);
+    attackerView.scale.setScalar(0.7);
+    updatePieceView(attackerView, rose.piece, 0);
+    start(tween(attackerView.scale).to({ x: 1, y: 1, z: 1 }, 520).easing(Easing.Cubic.Out));
+    start(tween(attackerView.position).to({ y: 0 }, 520).easing(Easing.Back.Out).onComplete(onDone));
+  }
+
+  /** Overworld capture: the victim drops through a crack onto the Underworld. */
+  private playFall(victimView: PieceView, fell: NonNullable<MoveInfo['fell']>, crackSquare: number, onDone: () => void): void {
+    restoreView(victimView);
+    const [crackX, crackZ] = squareToXZ(crackSquare);
+    this.fx.crack(this.boards[0], crackX, crackZ);
+    this.fx.burst(squarePoint(0, fell.from, 0.1), 'ember', 30);
+    const [landX, landZ] = squareToXZ(fell.to);
+    this.boards[1].add(victimView);
+    updatePieceView(victimView, fell.piece, 1);
+    victimView.position.set(landX, 0, landZ);
+    victimView.scale.setScalar(0.01);
+    this.fx.burst(squarePoint(1, fell.to, 0.1), 'ember', 28, { speed: 0.7 });
+    start(tween(victimView.scale).to({ x: 1, y: 1, z: 1 }, 380).easing(Easing.Back.Out).onComplete(onDone));
   }
 
   /** Pulses the checked king's tile. */
   checkFlash(sq: number): void {
-    const [x, z] = sqPos(sq);
+    const [x, z] = squareToXZ(sq);
     this.fx.flashTile(this.boards[0], x, z);
     this.onEvent('check');
     this.invalidate();
@@ -286,41 +280,8 @@ export class World {
 
   // ---------- markers ----------
 
-  setMarkers(m: MarkerSet): void {
-    for (const g of this.markers) g.clear();
-    const flat = (geo: THREE.BufferGeometry, color: number, opacity = 0.9) => {
-      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity, depthTest: false, side: THREE.DoubleSide,
-      }));
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.renderOrder = 10;
-      return mesh;
-    };
-    const at = (b: BoardId, sq: number, obj: THREE.Object3D, y = 0.04) => {
-      const [x, z] = sqPos(sq);
-      obj.position.set(x, y, z);
-      this.markers[b].add(obj);
-    };
-    const disc = new THREE.CircleGeometry(0.17, 16);
-    const ring = new THREE.RingGeometry(0.34, 0.45, 24);
-    const sel = new THREE.RingGeometry(0.4, 0.49, 24);
-    const sq4 = new THREE.PlaneGeometry(0.34, 0.34);
-    for (const q of m.quiet) at(q.b, q.sq, flat(disc, 0x4cf0a0));
-    for (const c of m.capture) at(c.b, c.sq, flat(ring, 0xff4040));
-    for (const a of m.attack) at(a.b, a.sq, flat(sq4, 0xff3030, 0.6));
-    for (const t of m.threat) at(t.b, t.sq, flat(new THREE.RingGeometry(0.3, 0.46, 4, 1, Math.PI / 4), 0xff2a2a, 0.95));
-    if (m.selected) at(m.selected.b, m.selected.sq, flat(sel, 0xffe14a));
-    for (const hnt of m.hints) {
-      at(hnt.b, hnt.sq, flat(new THREE.RingGeometry(0.43, 0.56, 28), 0xffd24a, 1), 0.05);
-      at(hnt.b, hnt.sq, flat(new THREE.CircleGeometry(0.43, 24), 0xffd24a, 0.25), 0.045);
-    }
-    if (m.rise) {
-      at(m.rise.b, m.rise.sq, flat(new THREE.RingGeometry(0.3, 0.5, 24), m.rise.check ? 0xff4040 : 0x7ad0ff));
-    }
-    for (const g of m.ghosts) {
-      const ghost = makeGhost(g, g.b);
-      at(g.b, g.sq, ghost, 0);
-    }
+  setMarkers(markers: MarkerSet): void {
+    fillMarkers(this.markers, markers);
     this.invalidate();
   }
 
@@ -359,7 +320,7 @@ export class World {
     return {
       yaw: base + this.rotation * 90,
       pitch: this.pitch(),
-      cy: this.active === 0 ? 0 : -GAP,
+      cy: boardY(this.active),
     };
   }
 
@@ -396,21 +357,13 @@ export class World {
 
   /** Screen rectangles (css px) for the Overworld and Underworld in top view: side by side on wide screens, stacked on tall ones. */
   dualRects(): [Rect, Rect] {
-    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
-    if (w >= h) {
-      const left = 58, right = 8, top = 30, bottom = 8, gap = 8;
-      const rw = (w - left - right - gap) / 2, rh = h - top - bottom;
-      return [{ x: left, y: top, w: rw, h: rh }, { x: left + rw + gap, y: top, w: rw, h: rh }];
-    }
-    const side = 6, top = 34, bottom = 112, gap = 8;
-    const rw = w - side * 2, rh = (h - top - bottom - gap) / 2;
-    return [{ x: side, y: top, w: rw, h: rh }, { x: side, y: top + rh + gap, w: rw, h: rh }];
+    return dualBoardRects(this.canvas.clientWidth, this.canvas.clientHeight);
   }
 
   private dualCam(b: BoardId): THREE.OrthographicCamera {
     const rc = this.dualRects()[b];
     const cam = b === 0 ? this.mainCam : this.portalCam;
-    this.frame(cam, rc.w / rc.h, { yaw: this.rotation * 90, pitch: 70, cy: b ? -GAP : 0 }, 9.4 * this.zoom);
+    this.frame(cam, rc.w / rc.h, { yaw: this.rotation * 90, pitch: 70, cy: boardY(b) }, 9.4 * this.zoom);
     return cam;
   }
 
@@ -423,7 +376,7 @@ export class World {
     const ndc = new THREE.Vector2(((clientX - r.left - rc.x) / rc.w) * 2 - 1, -((clientY - r.top - rc.y) / rc.h) * 2 + 1);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, cam);
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), board === 0 ? 0 : GAP);
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -boardY(board));
     const hit = new THREE.Vector3();
     if (!ray.ray.intersectPlane(plane, hit)) return null;
     const f = Math.round(hit.x + 3.5);
@@ -467,12 +420,10 @@ export class World {
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h, false);
-    const pw = Math.min(230, Math.round(w * 0.27));
-    const ph = Math.round(pw * 0.58);
-    // In portrait the toolbar takes a bar along the bottom, so the portal sits above it.
     const portrait = h > w;
     if (portrait !== this.lastPortrait) { this.lastPortrait = portrait; this.applyView(false); }
-    this.portalRect = { x: w - pw - 14, y: h - ph - (portrait ? 118 : 14), w: pw, h: ph };
+    this.portalRect = portalRectFor(w, h);
+    this.pixels.resize(w, h, Math.max(FRUSTUM_HEIGHT, (portrait ? 9.8 : 13) / (w / h)));
     this.invalidate();
   }
 
@@ -512,60 +463,46 @@ export class World {
     requestAnimationFrame(tick);
   }
 
-  private renderDual(w: number, h: number): void {
-    const r = this.renderer;
-    r.setScissorTest(false);
-    r.setViewport(0, 0, w, h);
-    r.setClearColor(0x0b0710, 1);
-    r.clear();
+  private renderDual(): void {
+    this.pixels.clear(0x0b0710);
     const rects = this.dualRects();
     for (const b of [0, 1] as BoardId[]) {
-      const rc = rects[b];
       const cam = this.dualCam(b);
-      const y = h - rc.y - rc.h;
-      r.setScissorTest(true);
-      r.setViewport(rc.x, y, rc.w, rc.h);
-      r.setScissor(rc.x, y, rc.w, rc.h);
       this.boards[0].visible = b === 0;
       this.boards[1].visible = b === 1;
       this.scene.fog = REALM[b].fog;
       this.scene.background = new THREE.Color(REALM[b].bg);
-      r.render(this.scene, cam);
+      this.pixels.render(this.scene, cam, rects[b]);
     }
-    r.setScissorTest(false);
+  }
+
+  private renderMainAndPortal(w: number, h: number): void {
+    const other = (1 - this.active) as BoardId;
+    this.frame(this.mainCam, w / h, this.view, FRUSTUM_HEIGHT * this.zoom);
+    const mainRealm = this.gliding ? (this.view.cy > -BOARD_GAP / 2 ? 0 : 1) : this.active;
+    this.boards[0].visible = this.gliding || this.active === 0;
+    this.boards[1].visible = this.gliding || this.active === 1;
+    this.scene.fog = this.gliding ? null : REALM[mainRealm].fog;
+    this.scene.background = new THREE.Color(REALM[mainRealm].bg);
+    this.pixels.render(this.scene, this.mainCam);
+
+    if (this.portalEnabled) {
+      const p = this.portalRect;
+      const pv: ViewState = { yaw: this.view.yaw, pitch: this.pitch(), cy: boardY(other) };
+      this.frame(this.portalCam, p.w / p.h, pv, FRUSTUM_HEIGHT + 0.6);
+      this.boards[0].visible = other === 0;
+      this.boards[1].visible = other === 1;
+      this.scene.fog = REALM[other].fog;
+      this.scene.background = new THREE.Color(REALM[other].bg);
+      this.pixels.render(this.scene, this.portalCam, p);
+    }
   }
 
   private render(): void {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     if (!w || !h) return;
-    const r = this.renderer;
-    if (this.dual) { this.renderDual(w, h); return; }
-    const other = (1 - this.active) as BoardId;
-    this.frame(this.mainCam, w / h, this.view, FRUSTUM_H * this.zoom);
-
-    r.setScissorTest(false);
-    r.setViewport(0, 0, w, h);
-    const mainRealm = this.gliding ? (this.view.cy > -GAP / 2 ? 0 : 1) : this.active;
-    this.boards[0].visible = this.gliding || this.active === 0;
-    this.boards[1].visible = this.gliding || this.active === 1;
-    this.scene.fog = this.gliding ? null : REALM[mainRealm].fog;
-    this.scene.background = new THREE.Color(REALM[mainRealm].bg);
-    r.render(this.scene, this.mainCam);
-
-    if (this.portalEnabled) {
-      const p = this.portalRect;
-      const pv: ViewState = { yaw: this.view.yaw, pitch: this.pitch(), cy: other === 0 ? 0 : -GAP };
-      this.frame(this.portalCam, p.w / p.h, pv, FRUSTUM_H + 0.6);
-      r.setScissorTest(true);
-      const y = h - p.y - p.h;
-      r.setViewport(p.x, y, p.w, p.h);
-      r.setScissor(p.x, y, p.w, p.h);
-      this.boards[0].visible = other === 0;
-      this.boards[1].visible = other === 1;
-      this.scene.fog = REALM[other].fog;
-      this.scene.background = new THREE.Color(REALM[other].bg);
-      r.render(this.scene, this.portalCam);
-      r.setScissorTest(false);
-    }
+    if (this.dual) this.renderDual();
+    else this.renderMainAndPortal(w, h);
+    this.pixels.present();
   }
 }

@@ -16,18 +16,21 @@ function march(k: Kit, ms: number, u0: number, u1: number, hop = 0.14, ease: (n:
   }, ease);
 }
 const hold = (k: Kit, o: THREE.Object3D, x = 0.22, y = 0.35, z = 0.1) => { const p = k.put(o, k.rig); p.position.set(x, y, z); return p; };
+/** Puffs of smoke kicked up behind the piece for `ms`. */
+const dustTrail = (k: Kit, ms: number, height = 0.05, puffs = 3) =>
+  k.every(ms, () => k.burst(k.a.position.clone().setY(height), 'smoke', puffs, { life: 0.4, speed: 0.4, spread: Math.PI / 2 }), 2);
 const spark = (k: Kit, p: THREE.Vector3, hex = 0xffffff) => { k.sfx('slash'); k.flash(p, hex, 0.45, 140); k.burst(p, 'white', 6, { speed: 1.2 }); };
 
-const move1: Style = {
+const soldierMarch: Style = {
   name: 'Soldier march',
   async run(k) { await march(k, 300 + k.dist * 220, 0, 1); },
 };
 
-const move2: Style = {
+const sprintAndSkid: Style = {
   name: 'Sprint and skid',
   async run(k) {
     k.face();
-    k.every(300 + k.dist * 150, () => k.burst(k.a.position.clone().setY(0.05), 'smoke', 3, { life: 0.4, speed: 0.4, spread: Math.PI / 2 }), 2);
+    dustTrail(k, 300 + k.dist * 150);
     await k.tw(300 + k.dist * 150, (u) => {
       k.a.position.copy(k.at(u));
       k.a.rotation.x = 0.35 * Math.sin(u * Math.PI);
@@ -36,7 +39,7 @@ const move2: Style = {
   },
 };
 
-const kill1: Style = {
+const pitchforkStab: Style = {
   name: 'Pitchfork stab',
   async run(k) {
     const f = hold(k, pitchfork(), 0.2, 0.3, 0.05);
@@ -49,7 +52,7 @@ const kill1: Style = {
   },
 };
 
-const kill2: Style = {
+const daggerFlurry: Style = {
   name: 'Dagger flurry',
   async run(k) {
     const d = hold(k, dagger(), 0.2, 0.3, 0.1);
@@ -65,7 +68,7 @@ const kill2: Style = {
   },
 };
 
-const kill3: Style = {
+const headbutt: Style = {
   name: 'Headbutt',
   async run(k) {
     await march(k, 300, 0, 0.6, 0.1, Easing.Quadratic.In);
@@ -78,18 +81,16 @@ const kill3: Style = {
   },
 };
 
-const kill4: Style = {
+const slingStone: Style = {
   name: 'Sling stone',
   async run(k) {
     k.face();
     const s = k.put(mesh(new THREE.SphereGeometry(0.07, 6, 5).toNonIndexed()));
     s.material = new THREE.MeshToonMaterial({ color: 0x8a8a90 });
-    const home = hold(k, new THREE.Object3D(), 0.2, 0.7, 0.1);
-    void home;
     const p0 = k.from.clone().setY(0.8);
     const p1 = k.to.clone().setY(0.45);
     s.position.copy(p0);
-    await k.tw(380, (u) => { s.position.set(k.from.x + Math.sin(u * 28) * 0.18, 0.8 + Math.cos(u * 28) * 0.18, k.from.z); k.a.rotation.y += 0.0; }, Easing.Linear.None);
+    await k.tw(380, (u) => { s.position.set(k.from.x + Math.sin(u * 28) * 0.18, 0.8 + Math.cos(u * 28) * 0.18, k.from.z); }, Easing.Linear.None);
     await k.proj(s, p0, p1, 240, 0.3, Easing.Quadratic.In);
     k.drop(s);
     spark(k, p1, 0xffffff);
@@ -99,12 +100,12 @@ const kill4: Style = {
   },
 };
 
-const kill5: Style = {
+const tackle: Style = {
   name: 'Tackle',
   async run(k) {
     k.face();
     let hit = false;
-    k.every(420, () => k.burst(k.a.position.clone().setY(0.05), 'smoke', 3, { life: 0.4, speed: 0.4, spread: Math.PI / 2 }), 2);
+    dustTrail(k, 420);
     await k.tw(420 + k.dist * 40, (u) => {
       k.a.position.copy(k.at(u * 0.95));
       k.a.rotation.x = 0.9 * Math.min(1, u * 3);
@@ -115,7 +116,7 @@ const kill5: Style = {
   },
 };
 
-const kill6: Style = {
+const spearThrow: Style = {
   name: 'Spear throw',
   async run(k) {
     k.face();
@@ -136,7 +137,7 @@ const kill6: Style = {
   },
 };
 
-const kill7: Style = {
+const torchBurn: Style = {
   name: 'Torch burn',
   async run(k) {
     const t = hold(k, torch(), 0.2, 0.3, 0.1);
@@ -151,7 +152,7 @@ const kill7: Style = {
   },
 };
 
-const kill8: Style = {
+const dropkick: Style = {
   name: 'Dropkick',
   async run(k) {
     await march(k, 300, 0, 0.55, 0.1, Easing.Quadratic.In);
@@ -167,13 +168,13 @@ const kill8: Style = {
   },
 };
 
-const kill9: Style = {
+const wreckingRoll: Style = {
   name: 'Wrecking roll',
   async run(k) {
     k.face();
     await k.tw(200, (u) => { k.a.scale.set(1, 1 - 0.3 * u, 1); }, Easing.Cubic.Out); // crouch
     let hit = false;
-    k.every(560, () => k.burst(k.a.position.clone().setY(0.1), 'smoke', 4, { life: 0.4, speed: 0.4, spread: Math.PI / 2 }), 2);
+    dustTrail(k, 560, 0.1, 4);
     await k.tw(560, (u) => {
       k.a.scale.set(1, 0.7, 1);
       k.a.position.copy(k.at(u * 0.95));
@@ -186,7 +187,7 @@ const kill9: Style = {
   },
 };
 
-const kill10: Style = {
+const mobDogpile: Style = {
   name: 'Mob dogpile',
   async run(k) {
     k.face();
@@ -214,4 +215,18 @@ const kill10: Style = {
   },
 };
 
-export const pawn = { moves: [move1, move2], kills: [kill1, kill2, kill3, kill4, kill5, kill6, kill7, kill8, kill9, kill10] };
+export const pawn = {
+  moves: [soldierMarch, sprintAndSkid],
+  kills: [
+    pitchforkStab,
+    daggerFlurry,
+    headbutt,
+    slingStone,
+    tackle,
+    spearThrow,
+    torchBurn,
+    dropkick,
+    wreckingRoll,
+    mobDogpile,
+  ],
+};

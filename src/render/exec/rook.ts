@@ -64,7 +64,7 @@ function driveTo(k: Kit, ms: number, u0: number, u1: number, ease: (n: number) =
   }, ease);
 }
 
-const move1: Style = {
+const tankRoll: Style = {
   name: 'Tank roll',
   async run(k) {
     const t = await morph(k);
@@ -74,7 +74,7 @@ const move1: Style = {
   },
 };
 
-const move2: Style = {
+const turboDrift: Style = {
   name: 'Turbo drift',
   async run(k) {
     const t = await morph(k);
@@ -85,7 +85,7 @@ const move2: Style = {
   },
 };
 
-const kill1: Style = {
+const runOver: Style = {
   name: 'Run over',
   async run(k) {
     const t = await morph(k);
@@ -97,7 +97,7 @@ const kill1: Style = {
   },
 };
 
-const kill2: Style = {
+const cannonShell: Style = {
   name: 'Cannon shell',
   async run(k) {
     const t = await morph(k);
@@ -112,7 +112,7 @@ const kill2: Style = {
   },
 };
 
-const kill3: Style = {
+const batteringRam: Style = {
   name: 'Battering ram',
   async run(k) {
     const t = await morph(k);
@@ -126,7 +126,7 @@ const kill3: Style = {
   },
 };
 
-const kill4: Style = {
+const driftCrush: Style = {
   name: 'Drift crush',
   async run(k) {
     const t = await morph(k);
@@ -138,7 +138,7 @@ const kill4: Style = {
   },
 };
 
-const kill5: Style = {
+const turretBarrage: Style = {
   name: 'Turret barrage',
   async run(k) {
     const t = await morph(k);
@@ -154,7 +154,7 @@ const kill5: Style = {
   },
 };
 
-const kill6: Style = {
+const doubleTap: Style = {
   name: 'Double tap',
   async run(k) {
     const t = await morph(k);
@@ -169,8 +169,9 @@ const kill6: Style = {
   },
 };
 
-const kill7: Style = {
+const tankDrop: Style = {
   name: 'Tank drop',
+  zoom: 1.1, // pull the camera back a little so the drop stays in frame
   async run(k) {
     const t = await morph(k);
     dust(k, 400);
@@ -189,7 +190,7 @@ const kill7: Style = {
   },
 };
 
-const kill8: Style = {
+const flamethrower: Style = {
   name: 'Flamethrower',
   async run(k) {
     const t = await morph(k);
@@ -210,7 +211,7 @@ const kill8: Style = {
   },
 };
 
-const kill9: Style = {
+const bulldoze: Style = {
   name: 'Bulldoze',
   async run(k) {
     const t = await morph(k);
@@ -229,7 +230,7 @@ const kill9: Style = {
   },
 };
 
-const kill10: Style = {
+const rocketPod: Style = {
   name: 'Rocket pod',
   async run(k) {
     const t = await morph(k);
@@ -257,4 +258,18 @@ const kill10: Style = {
   },
 };
 
-export const rook = { moves: [move1, move2], kills: [kill1, kill2, kill3, kill4, kill5, kill6, kill7, kill8, kill9, kill10] };
+export const rook = {
+  moves: [tankRoll, turboDrift],
+  kills: [
+    runOver,
+    cannonShell,
+    batteringRam,
+    driftCrush,
+    turretBarrage,
+    doubleTap,
+    tankDrop,
+    flamethrower,
+    bulldoze,
+    rocketPod,
+  ],
+};

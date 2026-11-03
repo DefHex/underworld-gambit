@@ -31,7 +31,6 @@ const catalog: Partial<Record<PieceType, Set>> = { b: bishop, r: rook, n: knight
 // Flying styles pull the camera back a little so nothing leaves the frame.
 for (const s of [...bishop.moves, ...bishop.kills]) s.zoom = 1.17;
 for (const s of [...knight.moves, ...knight.kills]) s.zoom = 1.08;
-for (const s of [...rook.kills.filter((x) => x.name === 'Tank drop')]) s.zoom = 1.1;
 
 /** For testing: `window.__style = { idx: 3 }` forces a style index; `kind: 'move'|'kill'`. */
 export const debug: { idx: number | null } = { idx: null };

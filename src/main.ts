@@ -1,4 +1,4 @@
-import { Game, PieceType, Status } from './rules';
+import { Game } from './rules';
 import { World } from './render/world';
 import { debug as styleDebug } from './render/exec';
 import { Controller } from './ui/controller';
@@ -9,249 +9,276 @@ import { saveSettings, settings } from './platform/settings';
 import { LEVEL_INFO } from './ai/levels';
 import { Tutorial } from './ui/tutorial';
 import { tutorialGame } from './tutorial/script';
+import { byId } from './ui/dom';
+import { renderMoveList, showPromotionPicker, statusText } from './ui/hud';
+import { closeSoundMenu, initSoundMenu, isSoundMenuOpen } from './ui/sound-menu';
 
-const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const canvas = $<HTMLCanvasElement>('stage');
+/** 0 = pass-and-play, 1-4 = play White against the AI at that level. */
+type OpponentMode = 0 | 1 | 2 | 3 | 4;
+
+const AI_MOVE_RETRY_MS = 120;
+const BOARD_GLIDE_WAIT_MS = 900;
+const MENU_FADE_MS = 900;
+const GAME_OVER_JINGLE_DELAY_MS = 1500;
+
+const canvas = byId<HTMLCanvasElement>('stage');
 const world = new World(canvas);
 let game = new Game();
-const ctl = new Controller(world, game, canvas);
+const controller = new Controller(world, game, canvas);
 const ai = new AiPlayer();
 let tutorial!: Tutorial;
 
-/** 0 = pass-and-play, 1-4 = play White against the AI at that level. */
-let mode: 0 | 1 | 2 | 3 | 4 = 0;
-let thinking = false;
-let epoch = 0;
+let opponentMode: OpponentMode = 0;
+let aiThinking = false;
+/** Bumped whenever the game is replaced, so a slow AI answer for an old game is ignored. */
+let gameEpoch = 0;
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-async function aiTurn(): Promise<void> {
-  if (!mode || thinking || ctl.locked || ctl.pos.side !== 1) return;
-  if (world.busy) { setTimeout(aiTurn, 120); return; }
-  thinking = true;
-  const mine = ++epoch;
-  const g = ctl.game;
+/** Stops any pending AI work and forgets what it knew. */
+function cancelAiTurn(): void {
+  gameEpoch++;
+  aiThinking = false;
+  ai.reset();
+}
+
+// ---------- AI turn ----------
+
+async function playAiTurn(): Promise<void> {
+  if (!opponentMode || aiThinking || controller.locked || controller.pos.side !== 1) return;
+  if (world.busy) { setTimeout(playAiTurn, AI_MOVE_RETRY_MS); return; }
+
+  aiThinking = true;
+  const epochAtStart = ++gameEpoch;
+  const gameAtStart = controller.game;
+  const isStale = () => epochAtStart !== gameEpoch || gameAtStart !== controller.game;
   updateHud();
-  const move = await ai.think(g.save(), mode);
-  thinking = false;
-  if (mine !== epoch || g !== ctl.game) return;
+
+  const move = await ai.think(gameAtStart.save(), opponentMode);
+  aiThinking = false;
+  if (isStale()) return;
+
   if (move) {
     // Bring the board the AI is about to move on into view first, so the player sees what happens.
     if (!world.dual && move.board !== world.active) {
-      thinking = true; // keep input locked during the glide
-      ctl.goTo(move.board);
+      aiThinking = true; // keep input locked during the glide
+      controller.goTo(move.board);
       updateHud();
-      await sleep(900);
-      thinking = false;
-      if (mine !== epoch || g !== ctl.game) return;
+      await sleep(BOARD_GLIDE_WAIT_MS);
+      aiThinking = false;
+      if (isStale()) return;
     }
-    ctl.play(move);
+    controller.play(move);
   }
   updateHud();
 }
-ctl.blocked = () => thinking || (mode > 0 && ctl.pos.side === 1) || tutorial.locked;
-ctl.onMoved = () => { if (tutorial.active) void tutorial.moved(); else void aiTurn(); };
+
+controller.blocked = () => aiThinking || (opponentMode > 0 && controller.pos.side === 1) || tutorial.locked;
+controller.onMoved = () => { if (tutorial.active) void tutorial.moved(); else void playAiTurn(); };
 
 function newGame(): void {
-  epoch++; thinking = false; ai.reset();
+  cancelAiTurn();
   game = new Game({ secondChance: settings.secondChance });
-  ctl.setGame(game);
+  controller.setGame(game);
 }
 
-const turn = $('turn'), hint = $('hint'), banner = $('banner'), movelist = $('movelist');
-const frame = $('portal-frame'), label = $('portal-label'), promo = $('promo');
+// ---------- HUD ----------
 
-function statusText(s: Status): string {
-  switch (s.state) {
-    case 'checkmate': return `Checkmate — ${s.winner === 0 ? 'White' : 'Black'} wins`;
-    case 'resigned': return `${s.winner === 0 ? 'White' : 'Black'} wins by resignation`;
-    case 'stalemate': return 'Stalemate — draw';
-    case 'draw': return `Draw by ${s.reason}`;
-    default: return '';
-  }
+const turnLabel = byId('turn');
+const hintLabel = byId('hint');
+const resultBanner = byId('banner');
+const moveListPanel = byId('movelist');
+const portalFrame = byId('portal-frame');
+const portalLabel = byId('portal-label');
+const overworldTag = byId('lbl-over');
+const underworldTag = byId('lbl-under');
+
+function describeTurn(status: ReturnType<Game['status']>): string {
+  if (aiThinking) return 'Black is thinking…';
+  if (status.state !== 'ongoing') return 'Game over';
+  const side = controller.pos.side === 0 ? 'White' : 'Black';
+  const check = status.check ? ' — check!' : '';
+  const realm = world.dual ? '' : ' · ' + (world.active === 0 ? 'Overworld' : 'Underworld');
+  return `${side} to move${check}${realm}`;
 }
 
 function layoutPortal(): void {
-  const p = world.portalRect;
-  Object.assign(frame.style, { left: p.x + 'px', top: p.y + 'px', width: p.w + 'px', height: p.h + 'px' });
+  const rect = world.portalRect;
+  Object.assign(portalFrame.style, { left: rect.x + 'px', top: rect.y + 'px', width: rect.w + 'px', height: rect.h + 'px' });
+}
+
+/** Top view shows both boards, so the corner portal gives way to two name tags. */
+function layoutRealmTags(): void {
+  portalFrame.style.display = world.dual ? 'none' : '';
+  [overworldTag, underworldTag].forEach((tag, boardIndex) => {
+    tag.hidden = !world.dual;
+    if (!world.dual) return;
+    const rect = world.dualRects()[boardIndex];
+    tag.style.left = rect.x + 6 + 'px';
+    tag.style.top = rect.y + 4 + 'px';
+  });
 }
 
 function updateHud(): void {
-  const s = ctl.game.status();
-  const side = ctl.pos.side === 0 ? 'White' : 'Black';
-  turn.textContent = thinking ? 'Black is thinking…' : s.state === 'ongoing' ? `${side} to move${s.check ? ' — check!' : ''}${world.dual ? '' : ' · ' + (world.active === 0 ? 'Overworld' : 'Underworld')}` : 'Game over';
-  hint.textContent = ctl.hint;
-  banner.hidden = s.state === 'ongoing';
-  banner.textContent = statusText(s);
-  ctl.locked = s.state !== 'ongoing';
-  label.textContent = world.active === 0 ? 'Underworld' : 'Overworld';
-  frame.className = ctl.locked ? '' : (ctl.portalAlert() ?? '');
+  const status = controller.game.status();
+  turnLabel.textContent = describeTurn(status);
+  hintLabel.textContent = controller.hint;
+  resultBanner.hidden = status.state === 'ongoing';
+  resultBanner.textContent = statusText(status);
+  controller.locked = status.state !== 'ongoing';
+  portalLabel.textContent = world.active === 0 ? 'Underworld' : 'Overworld';
+  portalFrame.className = controller.locked ? '' : (controller.portalAlert() ?? '');
   layoutPortal();
-  // Top view shows both boards, so the corner portal gives way to two name tags.
-  frame.style.display = world.dual ? 'none' : '';
-  for (const [i, el] of [$('lbl-over'), $('lbl-under')].entries()) {
-    el.hidden = !world.dual;
-    if (world.dual) { const rc = world.dualRects()[i]; el.style.left = rc.x + 6 + 'px'; el.style.top = rc.y + 4 + 'px'; }
-  }
-  movelist.innerHTML = '';
-  ctl.game.history.forEach((h, i) => {
-    const d = document.createElement('div');
-    d.innerHTML = `<span class="n">${i % 2 === 0 ? i / 2 + 1 + '.' : ''}</span>${h.san}`;
-    movelist.appendChild(d);
-  });
-  movelist.scrollTop = movelist.scrollHeight;
+  layoutRealmTags();
+  renderMoveList(controller.game.history);
 }
 
-ctl.onChange = () => { updateHud(); tutorial?.changed(); };
-ctl.onPromotion = (choose) => {
-  promo.hidden = false;
-  promo.innerHTML = '';
-  for (const [t, glyph] of [['q', '♛'], ['r', '♜'], ['b', '♝'], ['n', '♞']] as [PieceType, string][]) {
-    const b = document.createElement('button');
-    b.textContent = glyph;
-    b.onclick = () => { promo.hidden = true; choose(t); };
-    promo.appendChild(b);
+controller.onChange = () => { updateHud(); tutorial?.changed(); };
+controller.onPromotion = showPromotionPicker;
+
+// ---------- sound & haptics ----------
+
+world.onEvent = (event) => {
+  switch (event) {
+    case 'fall': audio.play('fall'); buzz('fall'); break;
+    case 'rise': audio.play('rise'); buzz('rise'); break;
+    case 'check': audio.play('check'); buzz('check'); break;
+    case 'destroy': audio.play('destroy'); break;
+    case 'promote': audio.play('promote'); break;
   }
 };
 
-world.onEvent = (e) => {
-  if (e === 'fall') { audio.play('fall'); buzz('fall'); }
-  else if (e === 'rise') { audio.play('rise'); buzz('rise'); }
-  else if (e === 'destroy') audio.play('destroy');
-  else if (e === 'check') { audio.play('check'); buzz('check'); }
-  else if (e === 'promote') audio.play('promote');
-};
 // Result jingle shortly after the mate / draw sound.
-ctl.onEnd = (winner) => {
+controller.onEnd = (winner) => {
+  const delay = winner === null ? 0 : GAME_OVER_JINGLE_DELAY_MS;
   setTimeout(() => {
     if (winner === null) audio.play('draw');
-    else audio.play(mode === 0 || winner === 0 ? 'victory' : 'defeat');
-  }, winner === null ? 0 : 1500);
+    else audio.play(opponentMode === 0 || winner === 0 ? 'victory' : 'defeat');
+  }, delay);
 };
+
 // A soft tick on every toolbar button.
-for (const b of Array.from(document.querySelectorAll('#toolbar button'))) b.addEventListener('click', () => audio.play('ui'));
+document.querySelectorAll('#toolbar button').forEach((button) => button.addEventListener('click', () => audio.play('ui')));
 // Browsers only allow audio after a gesture.
 window.addEventListener('pointerdown', () => audio.unlock(), { once: true });
-// The ♪ button opens a sound menu: music and effects have their own switch and volume.
-const soundMenu = $('sound-menu');
-const smMusic = $<HTMLInputElement>('sm-music'), smSfx = $<HTMLInputElement>('sm-sfx');
-const smMusicVol = $<HTMLInputElement>('sm-music-vol'), smSfxVol = $<HTMLInputElement>('sm-sfx-vol');
-const fill = (el: HTMLInputElement) => el.style.setProperty('--fill', el.value + '%');
-function paintSound(): void {
-  smMusic.checked = settings.music; smSfx.checked = settings.sound;
-  smMusicVol.value = String(Math.round(settings.musicVolume * 100)); smSfxVol.value = String(Math.round(settings.sfxVolume * 100));
-  fill(smMusicVol); fill(smSfxVol);
-  $('row-music').classList.toggle('off', !settings.music);
-  $('row-sfx').classList.toggle('off', !settings.sound);
-  $('btn-sound').textContent = settings.music || settings.sound ? '♪' : '🔇';
-}
-$('btn-sound').onclick = () => { soundMenu.hidden = !soundMenu.hidden; if (!soundMenu.hidden) paintSound(); };
-$('sm-close').onclick = () => { soundMenu.hidden = true; };
-smMusic.onchange = () => { settings.music = smMusic.checked; saveSettings(); audio.syncMusic(); paintSound(); };
-smSfx.onchange = () => { settings.sound = smSfx.checked; saveSettings(); paintSound(); if (settings.sound) audio.play('select'); };
-smMusicVol.oninput = () => { settings.musicVolume = Number(smMusicVol.value) / 100; fill(smMusicVol); saveSettings(); audio.syncMusic(true); };
-smSfxVol.oninput = () => { settings.sfxVolume = Number(smSfxVol.value) / 100; fill(smSfxVol); saveSettings(); };
-smSfxVol.onchange = () => audio.play('select'); // a sample at the new volume
-window.addEventListener('pointerdown', (e) => {
-  const t = e.target as Node;
-  if (!soundMenu.hidden && !soundMenu.contains(t) && !$('btn-sound').contains(t)) soundMenu.hidden = true;
-}, true);
-paintSound();
-const cineBtn = $('btn-cine');
-const paintCine = () => { cineBtn.style.opacity = settings.cinematic ? '1' : '0.45'; };
-cineBtn.onclick = () => { settings.cinematic = !settings.cinematic; saveSettings(); paintCine(); };
-paintCine();
-$('btn-switch').onclick = () => ctl.switchBoard();
-$('btn-rotate').onclick = () => world.rotate();
-$('btn-tactical').onclick = () => { world.toggleTactical(); ctl.deselect(); updateHud(); };
-$('btn-undo').onclick = () => {
-  if (thinking || world.busy || tutorial.active) return;
-  ctl.undo();
-  if (mode && ctl.pos.side === 1) ctl.undo(); // rewind a whole turn against the AI
+initSoundMenu();
+
+// ---------- toolbar ----------
+
+const cinematicButton = byId('btn-cine');
+const paintCinematicButton = () => { cinematicButton.style.opacity = settings.cinematic ? '1' : '0.45'; };
+cinematicButton.onclick = () => {
+  settings.cinematic = !settings.cinematic;
+  saveSettings();
+  paintCinematicButton();
 };
-$('btn-moves').onclick = () => { movelist.hidden = !movelist.hidden; };
-$('btn-new').onclick = () => { if (!tutorial.active) newGame(); };
-$('btn-home').onclick = () => showMenu();
+paintCinematicButton();
+
+byId('btn-switch').onclick = () => controller.switchBoard();
+byId('btn-rotate').onclick = () => world.rotate();
+byId('btn-tactical').onclick = () => { world.toggleTactical(); controller.deselect(); updateHud(); };
+byId('btn-undo').onclick = () => {
+  if (aiThinking || world.busy || tutorial.active) return;
+  controller.undo();
+  if (opponentMode && controller.pos.side === 1) controller.undo(); // rewind a whole turn against the AI
+};
+byId('btn-moves').onclick = () => { moveListPanel.hidden = !moveListPanel.hidden; };
+byId('btn-new').onclick = () => { if (!tutorial.active) newGame(); };
+byId('btn-home').onclick = () => showMenu();
 window.addEventListener('resize', () => { world.resize(); layoutPortal(); updateHud(); });
 
 world.syncPieces(game.pos, false);
 world.applyView(false);
-ctl.refresh();
+controller.refresh();
 
 // Handles for browser tests.
-(window as unknown as { __uw: unknown }).__uw = { world, ctl, settings, styleDebug, audio, get game() { return ctl.game; } };
+(window as unknown as { __uw: unknown }).__uw = {
+  world, ctl: controller, settings, styleDebug, audio, get game() { return controller.game; },
+};
 
 // ---------- welcome screen ----------
-const menu = $('menu'), menuMain = $('menu-main'), menuLevel = $('menu-level');
+
+const menu = byId('menu');
+const mainPanel = byId('menu-main');
+const levelPanel = byId('menu-level');
 document.body.classList.add('menu-open');
 
 function showPanel(which: 'main' | 'level'): void {
-  menuMain.hidden = which !== 'main';
-  menuLevel.hidden = which !== 'level';
+  mainPanel.hidden = which !== 'main';
+  levelPanel.hidden = which !== 'level';
 }
 
 function showMenu(): void {
-  soundMenu.hidden = true;
+  closeSoundMenu();
   tutorial.stop();
-  epoch++; thinking = false; ai.reset();
+  cancelAiTurn();
   menu.hidden = false;
   menu.classList.remove('leaving');
   document.body.classList.add('menu-open');
   showPanel('main');
-  void menu.offsetWidth;
+  void menu.offsetWidth; // restart the menu's fade-in animation
 }
 
-/** Fades the menu out and pushes the camera in on a fresh game. mode 0 = two players, 1-4 = AI level. */
-function startGame(m: 0 | 1 | 2 | 3 | 4): void {
-  mode = m;
-  if (m) { settings.aiLevel = m; saveSettings(); }
-  audio.unlock();
-  audio.play('start');
-  ctl.goTo(0);
-  newGame();
+/** Fades the menu out and pushes the camera in on a fresh game. */
+function leaveMenu(): void {
   menu.classList.add('leaving');
   document.body.classList.remove('menu-open');
   world.intro();
-  updateHud();
-  setTimeout(() => { if (menu.classList.contains('leaving')) menu.hidden = true; }, 900);
+  setTimeout(() => { if (menu.classList.contains('leaving')) menu.hidden = true; }, MENU_FADE_MS);
 }
 
-const levelsEl = $('levels');
-for (const lv of [1, 2, 3, 4] as const) {
-  const b = document.createElement('button');
-  b.className = 'level' + (settings.aiLevel === lv ? ' last' : '');
-  b.innerHTML = `<b>${LEVEL_INFO[lv].name}</b><div class="pips">${'●'.repeat(lv)}<i>${'●'.repeat(4 - lv)}</i></div><p>${LEVEL_INFO[lv].blurb}</p>`;
-  b.onclick = () => startGame(lv);
-  levelsEl.appendChild(b);
+function startGame(mode: OpponentMode): void {
+  opponentMode = mode;
+  if (mode) { settings.aiLevel = mode; saveSettings(); }
+  audio.unlock();
+  audio.play('start');
+  controller.goTo(0);
+  newGame();
+  leaveMenu();
+  updateHud();
 }
-$('m-single').onclick = () => { audio.unlock(); audio.play('ui'); showPanel('level'); };
-$('m-two').onclick = () => startGame(0);
-$('m-back').onclick = () => { audio.play('ui'); showPanel('main'); };
-window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (!soundMenu.hidden) soundMenu.hidden = true; else showMenu();
+
+function buildLevelButtons(): void {
+  const container = byId('levels');
+  for (const level of [1, 2, 3, 4] as const) {
+    const { name, blurb } = LEVEL_INFO[level];
+    const button = document.createElement('button');
+    button.className = 'level' + (settings.aiLevel === level ? ' last' : '');
+    button.innerHTML = `<b>${name}</b><div class="pips">${'●'.repeat(level)}<i>${'●'.repeat(4 - level)}</i></div><p>${blurb}</p>`;
+    button.onclick = () => startGame(level);
+    container.appendChild(button);
+  }
+}
+buildLevelButtons();
+
+byId('m-single').onclick = () => { audio.unlock(); audio.play('ui'); showPanel('level'); };
+byId('m-two').onclick = () => startGame(0);
+byId('m-back').onclick = () => { audio.play('ui'); showPanel('main'); };
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (isSoundMenuOpen()) closeSoundMenu(); else showMenu();
 });
 
 // ---------- tutorial ----------
+
 function startTutorial(): void {
-  mode = 0;
-  epoch++; thinking = false; ai.reset();
+  opponentMode = 0;
+  cancelAiTurn();
   audio.unlock();
   audio.play('start');
   if (world.dual) world.toggleTactical();
-  ctl.goTo(0);
+  controller.goTo(0);
   game = tutorialGame();
-  ctl.setGame(game);
-  menu.classList.add('leaving');
-  document.body.classList.remove('menu-open');
-  world.intro();
-  setTimeout(() => { if (menu.classList.contains('leaving')) menu.hidden = true; }, 900);
+  controller.setGame(game);
+  leaveMenu();
   tutorial.start();
   updateHud();
 }
+
 tutorial = new Tutorial({
-  world, ctl,
+  world,
+  ctl: controller,
   restart: () => { tutorial.stop(); startTutorial(); },
   leave: (to) => { showMenu(); if (to === 'single') showPanel('level'); },
 });
-$('m-tutorial').onclick = startTutorial;
+byId('m-tutorial').onclick = startTutorial;

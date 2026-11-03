@@ -23,12 +23,12 @@ function stride(k: Kit, ms: number, u0: number, u1: number, ease: (n: number) =>
 
 const hold = (k: Kit, o: THREE.Object3D, x = 0.3, y = 0.55, z = 0.1) => { const p = k.put(o, k.rig); p.position.set(x, y, z); return p; };
 
-const move1: Style = {
+const royalStride: Style = {
   name: 'Royal stride',
   async run(k) { await stride(k, 420 + k.dist * 230, 0, 1); k.ring(k.to.clone(), 0xe0b040, 1.1, 360); },
 };
 
-const move2: Style = {
+const decreeSweep: Style = {
   name: 'Decree sweep',
   async run(k) {
     k.face();
@@ -43,7 +43,7 @@ const move2: Style = {
   },
 };
 
-const kill1: Style = {
+const royalStomp: Style = {
   name: 'Royal stomp',
   async run(k) {
     await stride(k, 420, 0, 0.7, Easing.Quadratic.Out);
@@ -54,7 +54,7 @@ const kill1: Style = {
   },
 };
 
-const kill2: Style = {
+const scepterSmash: Style = {
   name: 'Scepter smash',
   async run(k) {
     const h = hold(k, hammer(), 0.32, 0.2, 0.15);
@@ -70,7 +70,7 @@ const kill2: Style = {
   },
 };
 
-const kill3: Style = {
+const decreeBeam: Style = {
   name: 'Decree beam',
   async run(k) {
     if (k.dist > 1.7) await stride(k, 360, 0, 0.55, Easing.Cubic.Out);
@@ -87,7 +87,7 @@ const kill3: Style = {
   },
 };
 
-const kill4: Style = {
+const executionerCleave: Style = {
   name: 'Executioner cleave',
   async run(k) {
     const s = hold(k, sword(), 0.3, 0.6, 0.1);
@@ -104,7 +104,7 @@ const kill4: Style = {
   },
 };
 
-const kill5: Style = {
+const throneDrop: Style = {
   name: 'Throne drop',
   async run(k) {
     k.face();
@@ -122,7 +122,7 @@ const kill5: Style = {
   },
 };
 
-const kill6: Style = {
+const shieldBash: Style = {
   name: 'Shield bash',
   async run(k) {
     const sh = hold(k, mesh(part(new THREE.CylinderGeometry(0.28, 0.28, 0.06, 10), PAL[k.a.userData.color].trim, { rx: Math.PI / 2 })), 0, 0.55, 0.38);
@@ -139,7 +139,7 @@ const kill6: Style = {
   },
 };
 
-const kill7: Style = {
+const royalCharge: Style = {
   name: 'Royal charge',
   async run(k) {
     k.face();
@@ -156,7 +156,7 @@ const kill7: Style = {
   },
 };
 
-const kill8: Style = {
+const guillotine: Style = {
   name: 'Guillotine',
   async run(k) {
     if (k.dist > 1.7) await stride(k, 360, 0, 0.55, Easing.Cubic.Out);
@@ -179,7 +179,7 @@ const kill8: Style = {
   },
 };
 
-const kill9: Style = {
+const crownToss: Style = {
   name: 'Crown toss',
   async run(k) {
     k.face();
@@ -199,7 +199,7 @@ const kill9: Style = {
   },
 };
 
-const kill10: Style = {
+const capeSweep: Style = {
   name: 'Cape sweep',
   async run(k) {
     if (k.dist > 1.7) await stride(k, 360, 0, 0.7, Easing.Cubic.Out);
@@ -218,4 +218,18 @@ const kill10: Style = {
   },
 };
 
-export const king = { moves: [move1, move2], kills: [kill1, kill2, kill3, kill4, kill5, kill6, kill7, kill8, kill9, kill10] };
+export const king = {
+  moves: [royalStride, decreeSweep],
+  kills: [
+    royalStomp,
+    scepterSmash,
+    decreeBeam,
+    executionerCleave,
+    throneDrop,
+    shieldBash,
+    royalCharge,
+    guillotine,
+    crownToss,
+    capeSweep,
+  ],
+};

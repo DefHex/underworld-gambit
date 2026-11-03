@@ -79,7 +79,7 @@ function strut(k: Kit, ms: number, u0: number, u1: number, ease: Ease = Easing.C
   }, ease);
 }
 
-const move1: Style = {
+const whipSwing: Style = {
   name: 'Whip swing',
   async run(k) {
     k.face();
@@ -98,7 +98,7 @@ const move1: Style = {
   },
 };
 
-const move2: Style = {
+const regalGlide: Style = {
   name: 'Regal glide',
   async run(k) {
     const l = new Lash(k);
@@ -115,7 +115,7 @@ const move2: Style = {
   },
 };
 
-const kill1: Style = {
+const lashAndDrag: Style = {
   name: 'Lash and drag',
   async run(k) {
     const l = new Lash(k);
@@ -138,7 +138,7 @@ const kill1: Style = {
   },
 };
 
-const kill2: Style = {
+const whipCrack: Style = {
   name: 'Whip crack',
   async run(k) {
     const l = new Lash(k);
@@ -154,7 +154,7 @@ const kill2: Style = {
   },
 };
 
-const kill3: Style = {
+const wrapAndWhirl: Style = {
   name: 'Wrap and whirl',
   async run(k) {
     const l = new Lash(k);
@@ -181,7 +181,7 @@ const kill3: Style = {
   },
 };
 
-const kill4: Style = {
+const threeLashes: Style = {
   name: 'Three lashes',
   async run(k) {
     const l = new Lash(k);
@@ -198,7 +198,7 @@ const kill4: Style = {
   },
 };
 
-const kill5: Style = {
+const lightningWhip: Style = {
   name: 'Lightning whip',
   async run(k) {
     const l = new Lash(k, 0x8fc4ff);
@@ -218,7 +218,7 @@ const kill5: Style = {
   },
 };
 
-const kill6: Style = {
+const fireWhip: Style = {
   name: 'Fire whip',
   async run(k) {
     const l = new Lash(k, 0xff8a30);
@@ -234,7 +234,7 @@ const kill6: Style = {
   },
 };
 
-const kill7: Style = {
+const tripAndHeelStomp: Style = {
   name: 'Trip and heel stomp',
   async run(k) {
     const l = new Lash(k);
@@ -255,7 +255,7 @@ const kill7: Style = {
   },
 };
 
-const kill8: Style = {
+const lassoHoist: Style = {
   name: 'Lasso hoist',
   async run(k) {
     const l = new Lash(k);
@@ -276,7 +276,7 @@ const kill8: Style = {
   },
 };
 
-const kill9: Style = {
+const dominion: Style = {
   name: 'Dominion',
   async run(k) {
     const l = new Lash(k);
@@ -298,7 +298,7 @@ const kill9: Style = {
   },
 };
 
-const kill10: Style = {
+const whipDash: Style = {
   name: 'Whip dash',
   async run(k) {
     const l = new Lash(k);
@@ -319,4 +319,18 @@ const kill10: Style = {
   },
 };
 
-export const queen = { moves: [move1, move2], kills: [kill1, kill2, kill3, kill4, kill5, kill6, kill7, kill8, kill9, kill10] };
+export const queen = {
+  moves: [whipSwing, regalGlide],
+  kills: [
+    lashAndDrag,
+    whipCrack,
+    wrapAndWhirl,
+    threeLashes,
+    lightningWhip,
+    fireWhip,
+    tripAndHeelStomp,
+    lassoHoist,
+    dominion,
+    whipDash,
+  ],
+};

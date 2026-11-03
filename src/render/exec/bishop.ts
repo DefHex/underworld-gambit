@@ -90,7 +90,7 @@ async function foldChute(k: Kit, c: THREE.Object3D): Promise<void> {
   k.drop(c);
 }
 
-const move1: Style = {
+const rocketHop: Style = {
   name: 'Rocket hop',
   async run(k) {
     const h = apex(k);
@@ -104,7 +104,7 @@ const move1: Style = {
   },
 };
 
-const move2: Style = {
+const corkscrewGlide: Style = {
   name: 'Corkscrew glide',
   async run(k) {
     const h = apex(k) * 0.9;
@@ -126,7 +126,7 @@ const move2: Style = {
 
 // ---------- the ten kills ----------
 
-const kill1: Style = {
+const orbitalStrike: Style = {
   name: 'Orbital strike',
   async run(k) {
     const r = strap(k);
@@ -147,7 +147,7 @@ const kill1: Style = {
   },
 };
 
-const kill2: Style = {
+const rocketRam: Style = {
   name: 'Rocket ram',
   async run(k) {
     const r = strap(k);
@@ -171,7 +171,7 @@ const kill2: Style = {
   },
 };
 
-const kill3: Style = {
+const paratrooperStomp: Style = {
   name: 'Paratrooper stomp',
   async run(k) {
     const h = 3.2;
@@ -189,7 +189,7 @@ const kill3: Style = {
   },
 };
 
-const kill4: Style = {
+const divineSmite: Style = {
   name: 'Divine smite',
   async run(k) {
     const r = strap(k);
@@ -212,7 +212,7 @@ const kill4: Style = {
   },
 };
 
-const kill5: Style = {
+const clusterBarrage: Style = {
   name: 'Cluster barrage',
   async run(k) {
     const r = strap(k);
@@ -241,7 +241,7 @@ const kill5: Style = {
   },
 };
 
-const kill6: Style = {
+const spiralDiveKick: Style = {
   name: 'Spiral dive kick',
   async run(k) {
     const h = 3;
@@ -265,7 +265,7 @@ const kill6: Style = {
   },
 };
 
-const kill7: Style = {
+const humanCannonball: Style = {
   name: 'Human cannonball',
   async run(k) {
     const r = strap(k);
@@ -284,7 +284,7 @@ const kill7: Style = {
   },
 };
 
-const kill8: Style = {
+const fireworksFinale: Style = {
   name: 'Fireworks finale',
   async run(k) {
     const r = strap(k);
@@ -307,7 +307,7 @@ const kill8: Style = {
   },
 };
 
-const kill9: Style = {
+const glideInLanding: Style = {
   name: 'Glide-in landing',
   async run(k) {
     const r = strap(k);
@@ -327,7 +327,7 @@ const kill9: Style = {
   },
 };
 
-const kill10: Style = {
+const dragChuteRam: Style = {
   name: 'Drag-chute ram',
   async run(k) {
     const r = strap(k);
@@ -349,4 +349,18 @@ const kill10: Style = {
   },
 };
 
-export const bishop = { moves: [move1, move2], kills: [kill1, kill2, kill3, kill4, kill5, kill6, kill7, kill8, kill9, kill10] };
+export const bishop = {
+  moves: [rocketHop, corkscrewGlide],
+  kills: [
+    orbitalStrike,
+    rocketRam,
+    paratrooperStomp,
+    divineSmite,
+    clusterBarrage,
+    spiralDiveKick,
+    humanCannonball,
+    fireworksFinale,
+    glideInLanding,
+    dragChuteRam,
+  ],
+};

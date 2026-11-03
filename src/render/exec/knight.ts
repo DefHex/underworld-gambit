@@ -41,7 +41,7 @@ function holdSword(k: Kit) {
 }
 const slash = (k: Kit, p: THREE.Vector3, hex = 0xffffff) => { k.sfx('slash'); k.flash(p, hex, 0.5, 140); k.burst(p, 'white', 8, { speed: 1.3 }); };
 
-const move1: Style = {
+const gallopLeap: Style = {
   name: 'Gallop leap',
   async run(k) {
     await gallop(k, 260 + k.dist * 150, 0, 0.78, 0.14, Easing.Quadratic.In);
@@ -55,7 +55,7 @@ const move1: Style = {
   },
 };
 
-const move2: Style = {
+const rearAndCharge: Style = {
   name: 'Rear and charge',
   async run(k) {
     k.face();
@@ -66,7 +66,7 @@ const move2: Style = {
   },
 };
 
-const kill1: Style = {
+const lanceImpale: Style = {
   name: 'Lance impale',
   async run(k) {
     const l = holdLance(k);
@@ -91,7 +91,7 @@ const kill1: Style = {
   },
 };
 
-const kill2: Style = {
+const trample: Style = {
   name: 'Trample',
   async run(k) {
     await gallop(k, 420, 0, 0.72, 0.12, Easing.Quadratic.In);
@@ -106,7 +106,7 @@ const kill2: Style = {
   },
 };
 
-const kill3: Style = {
+const swordFlurry: Style = {
   name: 'Sword flurry',
   async run(k) {
     const s = holdSword(k);
@@ -123,7 +123,7 @@ const kill3: Style = {
   },
 };
 
-const kill4: Style = {
+const poleVault: Style = {
   name: 'Pole-vault',
   async run(k) {
     const l = holdLance(k);
@@ -142,7 +142,7 @@ const kill4: Style = {
   },
 };
 
-const kill5: Style = {
+const rearingStrike: Style = {
   name: 'Rearing strike',
   async run(k) {
     await gallop(k, 400, 0, 0.78, 0.12, Easing.Quadratic.Out);
@@ -156,7 +156,7 @@ const kill5: Style = {
   },
 };
 
-const kill6: Style = {
+const joustSweep: Style = {
   name: 'Joust sweep',
   async run(k) {
     const l = holdLance(k);
@@ -176,7 +176,7 @@ const kill6: Style = {
   },
 };
 
-const kill7: Style = {
+const buckKick: Style = {
   name: 'Buck kick',
   async run(k) {
     await gallop(k, 420, 0, 0.68, 0.12, Easing.Quadratic.In);
@@ -192,7 +192,7 @@ const kill7: Style = {
   },
 };
 
-const kill8: Style = {
+const whirlwind: Style = {
   name: 'Whirlwind',
   async run(k) {
     const s = holdSword(k);
@@ -213,7 +213,7 @@ const kill8: Style = {
   },
 };
 
-const kill9: Style = {
+const lanceThrow: Style = {
   name: 'Lance throw',
   async run(k) {
     const l = holdLance(k);
@@ -238,7 +238,7 @@ const kill9: Style = {
   },
 };
 
-const kill10: Style = {
+const leapAndPlunge: Style = {
   name: 'Leap and plunge',
   async run(k) {
     const l = holdLance(k);
@@ -258,4 +258,18 @@ const kill10: Style = {
   },
 };
 
-export const knight = { moves: [move1, move2], kills: [kill1, kill2, kill3, kill4, kill5, kill6, kill7, kill8, kill9, kill10] };
+export const knight = {
+  moves: [gallopLeap, rearAndCharge],
+  kills: [
+    lanceImpale,
+    trample,
+    swordFlurry,
+    poleVault,
+    rearingStrike,
+    joustSweep,
+    buckKick,
+    whirlwind,
+    lanceThrow,
+    leapAndPlunge,
+  ],
+};

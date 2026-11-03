@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Rect } from './coords';
 
-/** Low-res pixels per board square: about one sprite texel per pixel, like the original Doom sprites. */
-const PIXELS_PER_SQUARE = 72;
+/** Low-res pixels per board square: one sprite texel per pixel, big Wolfenstein-style pixels on screen. */
+const PIXELS_PER_SQUARE = 36;
 
 /**
  * Draws the scene into a low-resolution target and scales it up with hard edges, so the 3D board,

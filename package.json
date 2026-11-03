@@ -9,7 +9,8 @@
     "test": "vitest run",
     "selfplay": "node scripts/run-selfplay.mjs",
     "sprites": "node scripts/sprites/build-sprites.mjs",
-    "check-sprites": "node scripts/check-sprites.mjs"
+    "check-sprites": "node scripts/check-sprites.mjs",
+    "bake": "node scripts/sprites/bake-sprites.mjs"
   },
   "devDependencies": {
     "@types/howler": "^2.2.13",

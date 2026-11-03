@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { BoardId, PieceType } from '../../rules';
 
 /**
- * Pixel-art piece sprites, built by scripts/sprites/build-sprites.mjs from the CC0 sheets in art/sprites.
+ * Pixel-art piece sprites, baked from the models in src/bake (npm run bake) and built by
+ * scripts/sprites/build-sprites.mjs (npm run sprites).
  * Each sheet image stores palette indices (0 = transparent, 1 = outline); colors come from a shared
  * palette texture with one row per piece, team and realm.
  */
@@ -19,14 +20,14 @@ export interface SheetTag {
   contact?: number;
 }
 export interface SheetData {
-  character: string;
   image: string;
   size: { w: number; h: number };
   unitsPerTexel: number;
-  hover: number;
   palette: string[];
   /** 5th, 50th and 95th percentile of the sprite's pixel luminance. */
   luminance: [number, number, number];
+  /** Palette indices that keep their own color on every team (fire, flashes, blood, magic). */
+  keep: number[];
   frames: SheetFrame[];
   tags: Partial<Record<SpriteTag, SheetTag>>;
 }
@@ -53,7 +54,7 @@ const LOOKS: Record<BoardId, [Look, Look]> = {
   ],
 };
 /** How much of a sprite's original hue survives the recolor. */
-const ORIGINAL_HUE = 0.18;
+const ORIGINAL_HUE = 0.22;
 
 type Rgb = [number, number, number];
 
@@ -61,15 +62,6 @@ const hexToRgb = (hex: string): Rgb => {
   const v = Number.parseInt(hex.slice(1), 16);
   return [(v >> 16) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
 };
-
-/** Hue in degrees, 0-360. */
-function hueOf([r, g, b]: Rgb): number {
-  const max = Math.max(r, g, b), range = max - Math.min(r, g, b);
-  if (range === 0) return 0;
-  if (max === r) return 60 * (((g - b) / range + 6) % 6);
-  if (max === g) return 60 * ((b - r) / range + 2);
-  return 60 * ((r - g) / range + 4);
-}
 
 function sampleRamp(ramp: Ramp, t: number): Rgb {
   for (let i = 1; i < ramp.length; i++) {
@@ -81,13 +73,6 @@ function sampleRamp(ramp: Ramp, t: number): Rgb {
     return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   }
   return hexToRgb(ramp.at(-1)![1]);
-}
-
-/** Muzzle flashes, glowing eyes and fire: bright, saturated yellows keep their own color on every team. */
-function isGlow(color: Rgb): boolean {
-  const max = Math.max(...color), saturation = max === 0 ? 0 : (max - Math.min(...color)) / max;
-  const hue = hueOf(color);
-  return max >= 0.8 && saturation >= 0.55 && hue >= 35 && hue <= 70;
 }
 
 /** Maps a luminance onto the ramp: the sprite's darkest, median and brightest tones land on 0.06, `middle` and 0.94. */
@@ -105,7 +90,7 @@ function writePaletteRow(target: Uint8Array, row: number, data: SheetData, look:
       const original = hexToRgb(hex);
       const luminance = 0.2126 * original[0] + 0.7152 * original[1] + 0.0722 * original[2];
       const team = sampleRamp(look.ramp, rampPosition(luminance, data.luminance, look.middle));
-      color = isGlow(original)
+      color = data.keep.includes(index)
         ? original
         : team.map((value, channel) => value + (original[channel] - value) * ORIGINAL_HUE) as Rgb;
     }

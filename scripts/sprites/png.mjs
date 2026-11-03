@@ -1,5 +1,5 @@
-// Minimal PNG reader/writer (no dependencies). Supports 8-bit, non-interlaced
-// gray, RGB, indexed, gray+alpha and RGBA images, which covers every sheet we use.
+// Minimal PNG reader/writer (no dependencies). Reads 8-bit, non-interlaced gray, RGB, indexed,
+// gray+alpha and RGBA images; writes the palette-index images the game loads.
 import zlib from 'node:zlib';
 
 const SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -94,9 +94,6 @@ function encode(width, height, colorType, channels, pixels, extraChunks = []) {
     chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0)),
   ]);
 }
-
-/** RGBA image, for previews. */
-export const writeRgbaPng = (width, height, rgba) => encode(width, height, 6, 4, rgba);
 
 /**
  * Index image whose palette is the identity gray ramp (entry i = rgb(i,i,i)) with index 0 transparent.

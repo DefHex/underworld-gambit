@@ -3,7 +3,7 @@ import { play, Sfx } from '../../audio/audio';
 import type { Palette } from '../fx';
 import { PAL, PieceView } from '../pieces';
 import type { SpriteTag } from '../sprites/sheets';
-import { SpriteBody, isSpriteBody } from '../sprites/sprite-body';
+import type { PixelSpriteMaterial, SpriteBody } from '../sprites/sprite-body';
 import { Easing, start, tween } from '../tween';
 import type { World } from '../world';
 import { debris, glow } from './props';
@@ -25,6 +25,7 @@ export interface AnimOptions {
   /** Called once, on the animation's contact step (when an attack lands). */
   onContact?: () => void;
 }
+export interface WalkOptions { ease?: Ease; hump?: number; stride?: number }
 export interface ReactOpts { dir?: V3; power?: number }
 export interface Style { name: string; run: (k: Kit) => Promise<void>; zoom?: number }
 type Ease = (k: number) => number;
@@ -36,11 +37,11 @@ type Ease = (k: number) => number;
 export class Kit {
   readonly dir: V3;
   readonly dist: number;
-  /** Parent for props that should follow the piece: its local +z is the way the model faces. */
-  readonly rig = new THREE.Group();
   reaction: Promise<void> = Promise.resolve();
   hitCalled = false;
   private props: THREE.Object3D[] = [];
+  /** The sprite's own turn inside the piece (white faces the other way), so face() can aim the whole piece. */
+  private readonly bodyYaw: number;
 
   constructor(
     readonly w: World, readonly g: THREE.Object3D, readonly a: PieceView, readonly v: PieceView | null,
@@ -50,8 +51,7 @@ export class Kit {
     this.dist = d.length();
     this.dir = this.dist > 0.001 ? d.normalize() : V(0, 0, a.userData.color === 0 ? -1 : 1);
     a.rotation.order = 'YXZ'; // yaw first, then pitch/roll relative to where the piece faces
-    this.rig.rotation.y = a.userData.body.rotation.y;
-    a.add(this.rig);
+    this.bodyYaw = a.userData.body.rotation.y;
   }
 
   // ---------- timing ----------
@@ -74,10 +74,10 @@ export class Kit {
   }
   drop(o: THREE.Object3D): void { o.parent?.remove(o); }
   /** Point the piece along `d` (default: toward the victim). */
-  face(d: V3 = this.dir): void { this.a.rotation.y = Math.atan2(d.x, d.z) - this.rig.rotation.y; }
+  face(d: V3 = this.dir): void { this.a.rotation.y = Math.atan2(d.x, d.z) - this.bodyYaw; }
   bodyVisible(on: boolean): void {
-    const u = this.a.userData;
-    u.body.visible = on; u.outline.visible = on; u.blob.visible = on;
+    this.a.userData.body.visible = on;
+    this.a.userData.blob.visible = on;
   }
   at(u: number, y = 0): V3 { return this.from.clone().lerp(this.to, u).setY(y); }
   /** Moves the piece along the from→to line between fractions u0 and u1, with an optional hump. */
@@ -101,39 +101,38 @@ export class Kit {
     void this.tw(ms, () => { if (++n % frames === 0) fn(); }, Easing.Linear.None);
   }
 
-  // ---------- pixel sprites ----------
+  // ---------- sprite animation ----------
 
-  /** The attacker's sprite, when it is drawn as one. */
-  get sprite(): SpriteBody | undefined { return spriteOf(this.a); }
-  /** The victim's sprite, when there is a victim drawn as one. */
-  get victimSprite(): SpriteBody | undefined { return this.v ? spriteOf(this.v) : undefined; }
+  /** The attacker's sprite. */
+  get sprite(): SpriteBody { return this.a.userData.body; }
 
-  /** Holds one step of a sprite animation (no-op for 3D pieces). */
-  pose(tag: SpriteTag, step = 0, view: PieceView = this.a): void { spriteOf(view)?.pose(tag, step); }
+  /** Holds one step of an animation. */
+  pose(tag: SpriteTag, step = 0, view: PieceView = this.a): void { view.userData.body.pose(tag, step); }
 
-  /**
-   * Plays a sprite animation through once, on the virtual clock (so slow motion slows it too).
-   * 3D pieces just wait the same time, so a style can mix both.
-   */
+  /** Plays an animation through once on the virtual clock (so slow motion slows it too); fires `onContact` on its contact step. */
   anim(tag: SpriteTag, options: AnimOptions = {}): Promise<void> {
-    const body = spriteOf(options.view ?? this.a);
-    const steps = Math.max(1, body?.steps(tag) ?? 1);
-    const contact = body?.contact(tag) ?? 0;
+    const body = (options.view ?? this.a).userData.body;
+    const steps = Math.max(1, body.steps(tag));
+    const contact = body.contact(tag);
     let contacted = false;
     return this.tw(options.ms ?? (steps / (options.fps ?? 8)) * 1000, (u) => {
       const step = Math.min(steps - 1, Math.floor(u * steps));
-      body?.pose(tag, step);
+      body.pose(tag, step);
       if (!contacted && step >= contact) { contacted = true; options.onContact?.(); }
     }, Easing.Linear.None);
   }
 
-  /** Walks the attacker along the from→to line between fractions u0 and u1, cycling its walk frames. */
-  walk(ms: number, u0: number, u1: number, ease: Ease = Easing.Linear.None): Promise<void> {
+  /**
+   * Walks (or gallops, or hops) the attacker along the from→to line between fractions u0 and u1,
+   * cycling its move frames; `hump` lifts it into an arc.
+   */
+  walk(ms: number, u0: number, u1: number, { ease = Easing.Linear.None, hump = 0, stride = WALK_STRIDE }: WalkOptions = {}): Promise<void> {
     this.face();
-    const steps = Math.max(1, this.sprite?.steps('move') ?? 1);
-    const cycles = Math.max(1, Math.round((Math.abs(u1 - u0) * this.dist) / WALK_STRIDE));
+    const steps = Math.max(1, this.sprite.steps('move'));
+    const cycles = Math.max(1, Math.round((Math.abs(u1 - u0) * this.dist) / stride));
     return this.tw(ms, (t) => {
       this.a.position.copy(this.at(u0 + (u1 - u0) * t));
+      this.a.position.y += 4 * hump * t * (1 - t);
       this.pose('move', Math.floor(t * cycles * steps) % steps);
     }, ease);
   }
@@ -183,7 +182,6 @@ export class Kit {
   /** Removes props and puts the attacker down on its destination square. */
   cleanup(): void {
     for (const p of this.props) p.parent?.remove(p);
-    this.a.remove(this.rig);
     this.bodyVisible(true);
     this.pose('idle');
     this.a.rotation.set(0, 0, 0);
@@ -198,10 +196,8 @@ export function restoreView(v: PieceView): void {
   v.position.y = 0;
   v.children.forEach((c) => { c.visible = true; });
   v.userData.body.visible = true;
-  spriteOf(v)?.pose('idle');
+  v.userData.body.pose('idle');
 }
-
-const spriteOf = (view: PieceView): SpriteBody | undefined => (isSpriteBody(view.userData.body) ? view.userData.body : undefined);
 
 function spawnDebris(k: Kit, v: PieceView, n: number) {
   const pal = PAL[v.userData.color];
@@ -272,7 +268,7 @@ const REACTIONS: Record<Reaction, (k: Kit, v: PieceView, o: Required<ReactOpts>)
     v.scale.setScalar(0.01);
   },
   async burn(k, v) {
-    const m = v.userData.body.material as THREE.MeshToonMaterial;
+    const m = v.userData.body.material as PixelSpriteMaterial;
     const p = v.position.clone();
     k.every(800, () => k.burst(p.clone().setY(0.5), 'fire', 6, { speed: 0.6 }), 3);
     await k.tw(700, (u) => {
@@ -285,7 +281,7 @@ const REACTIONS: Record<Reaction, (k: Kit, v: PieceView, o: Required<ReactOpts>)
     await k.tw(260, (u) => v.scale.setScalar(Math.max(0.01, 0.55 * (1 - u))));
   },
   async zap(k, v) {
-    const m = v.userData.body.material as THREE.MeshToonMaterial;
+    const m = v.userData.body.material as PixelSpriteMaterial;
     const p = v.position.clone();
     k.burst(p.clone().setY(0.5), 'blue', 26, { speed: 1.4 });
     await k.tw(520, (u) => {
@@ -316,9 +312,9 @@ const REACTIONS: Record<Reaction, (k: Kit, v: PieceView, o: Required<ReactOpts>)
       v.scale.setScalar(Math.max(0.01, 1 - u * u));
     }, Easing.Quadratic.In);
   },
-  /** Sprite victims play their own death frames; 3D pieces topple instead. */
+  /** The victim plays its own death frames, Doom style. */
   async die(k, v, o) {
-    if (!spriteOf(v)?.steps('death')) return REACTIONS.topple(k, v, o);
+    if (!v.userData.body.steps('death')) return REACTIONS.topple(k, v, o);
     k.burst(v.position.clone().setY(0.4), 'smoke', 10, { spread: Math.PI / 2.4 });
     await k.anim('death', { view: v, fps: 11 });
     await k.wait(420);

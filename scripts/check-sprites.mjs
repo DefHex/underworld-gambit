@@ -1,23 +1,23 @@
-// Validates the built sprite sheets in public/sprites: image size, palette limit, frame bounds,
-// tag names, all 8 views per step and contact frames. Also runs as part of `npm test`.
+// Validates the built sprite sheets in public/sprites: one per piece, image size, palette limit,
+// frame bounds, tag names, all 8 views per step, contact steps and team-proof colors.
+// Also runs as part of `npm test`.
 //
 //   node scripts/check-sprites.mjs
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PIECES } from './sprites/build-sprites.mjs';
 import { readPng } from './sprites/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PIECES = ['pawn', 'knight', 'bishop', 'rook', 'queen', 'king'];
 const REQUIRED_TAGS = ['idle', 'move', 'atk_a', 'hurt', 'death'];
-const MAX_FRAME_SIZE = 256;
+const MAX_FRAME_SIZE = 64;
 const VIEWS = 8;
 
 function checkFrames(sheet, report) {
   sheet.frames.forEach((f, i) => {
     if (f.x < 0 || f.y < 0 || f.x + f.w > sheet.size.w || f.y + f.h > sheet.size.h) report(`frame ${i} lies outside the atlas`);
-    if (f.w > MAX_FRAME_SIZE || f.h > MAX_FRAME_SIZE) report(`frame ${i} is ${f.w}x${f.h}, max ${MAX_FRAME_SIZE}`);
-    if (f.ax < 0 || f.ax > f.w || f.ay < 0 || f.ay > f.h) report(`frame ${i} has its anchor outside the frame`);
+    if (f.w > MAX_FRAME_SIZE + 2 || f.h > MAX_FRAME_SIZE + 2) report(`frame ${i} is ${f.w}x${f.h}, larger than a cell`);
   });
 }
 
@@ -38,6 +38,7 @@ function checkTags(sheet, report) {
 function checkPixels(sheet, image, report) {
   if (image.width !== sheet.size.w || image.height !== sheet.size.h) report(`image is ${image.width}x${image.height}, data says ${sheet.size.w}x${sheet.size.h}`);
   if (sheet.palette.length > 256) report(`palette has ${sheet.palette.length} colors, max 256`);
+  for (const index of sheet.keep) if (index < 2 || index >= sheet.palette.length) report(`keep color ${index} is not in the palette`);
   for (let i = 0; i < image.width * image.height; i++) {
     const opaque = image.rgba[i * 4 + 3] > 0, index = image.rgba[i * 4];
     if (opaque && index >= sheet.palette.length) { report(`a pixel uses palette index ${index}, beyond the palette`); return; }
@@ -47,13 +48,16 @@ function checkPixels(sheet, image, report) {
 /** Returns every problem found (empty when the sheets are fine). */
 export function checkSprites() {
   const problems = [];
-  for (const [name, config] of Object.entries(PIECES)) {
+  for (const name of PIECES) {
     const report = (message) => problems.push(`${name}: ${message}`);
-    const file = (ext) => path.join(ROOT, 'public/sprites', `${name}.${ext}`);
-    if (!fs.existsSync(path.join(ROOT, 'art/sprites', config.source))) report(`source sheet art/sprites/${config.source} is missing`);
-    if (!fs.existsSync(file('json')) || !fs.existsSync(file('png'))) { report('sheet missing (run npm run sprites)'); continue; }
-    const sheet = JSON.parse(fs.readFileSync(file('json'), 'utf8'));
-    checkPixels(sheet, readPng(fs.readFileSync(file('png'))), report);
+    const file = (dir, ext) => path.join(ROOT, dir, `${name}.${ext}`);
+    if (!fs.existsSync(file('art/sprites', 'png'))) report(`baked sheet art/sprites/${name}.png is missing (npm run bake)`);
+    if (!fs.existsSync(file('public/sprites', 'json')) || !fs.existsSync(file('public/sprites', 'png'))) {
+      report('built sheet missing (npm run sprites)');
+      continue;
+    }
+    const sheet = JSON.parse(fs.readFileSync(file('public/sprites', 'json'), 'utf8'));
+    checkPixels(sheet, readPng(fs.readFileSync(file('public/sprites', 'png'))), report);
     checkFrames(sheet, report);
     checkTags(sheet, report);
   }

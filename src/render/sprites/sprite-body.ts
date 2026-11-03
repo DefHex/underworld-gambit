@@ -117,8 +117,6 @@ export class SpriteBody extends THREE.Mesh<THREE.PlaneGeometry, PixelSpriteMater
   pose(tag: SpriteTag, step = 0): void {
     this.tag = tag;
     this.step = step;
-    // Floating pieces hover, but their corpse lies on the floor.
-    this.position.y = tag === 'death' ? 0 : (this.sheet.data?.hover ?? 0);
   }
 
   /** Number of steps in an animation (0 if the sheet does not have it or is not loaded yet). */
@@ -131,7 +129,6 @@ export class SpriteBody extends THREE.Mesh<THREE.PlaneGeometry, PixelSpriteMater
     const data = this.sheet.data;
     const u = this.material.uniforms;
     if (!data) { u.frameSize.value.set(0, 0); return; }
-    if (this.position.y === 0 && this.tag !== 'death' && data.hover) this.position.y = data.hover; // loaded after pose()
     const tag = data.tags[this.tag] ?? data.tags.idle!;
     const [frameIndex, mirrored] = tag.steps[Math.min(this.step, tag.steps.length - 1)][this.rotationFor(camera)];
     const frame = data.frames[frameIndex];

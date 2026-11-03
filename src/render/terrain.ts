@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ball, box, cone, cyl, merge } from './pieces';
+import { ball, box, cone, cyl, merge } from './modeling';
 import { glow, mesh } from './exec/props';
 import { loadProp } from './models';
 

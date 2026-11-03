@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { box, cone, cyl, merge } from './pieces';
+import { box, cone, cyl, merge } from './modeling';
 import { glow, mesh } from './exec/props';
 
 /**
